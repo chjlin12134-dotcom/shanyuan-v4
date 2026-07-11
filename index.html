@@ -2209,6 +2209,8 @@ let voiceStopRequested = false;
 let hasSpeech = false; // 本輪錄音是否偵測到真實說話聲
 let interruptStream = null;
 let interruptCtx = null;
+let voiceTipShownThisPage = false;
+let sttUnavailable = false;
 // 手機：持久化 mic stream，避免每輪 getUserMedia 造成 Android stream 耗盡
 let persistentMicStream = null;
 function stopInterruptDetect() {
@@ -2217,9 +2219,13 @@ function stopInterruptDetect() {
 }
 
 function toggleVoice() {
+  if (sttUnavailable) {
+    addMessage('assistant', '語音辨識還沒有設定完成，所以現在先暫停語音對話。可以先用文字輸入；等語音辨識金鑰接上後，再開啟麥克風。');
+    return;
+  }
   if (mediaRecorder && mediaRecorder.state === 'recording') { stopRecording(); return; }
-  if (!localStorage.getItem('voice_tip_seen')) {
-    localStorage.setItem('voice_tip_seen', '1');
+  if (!voiceTipShownThisPage) {
+    voiceTipShownThisPage = true;
     const tip = document.createElement('div');
     tip.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(242,236,226,0.97);border:1px solid rgba(150,130,100,0.35);border-radius:14px;padding:22px 24px;max-width:300px;width:88vw;z-index:999;box-shadow:0 4px 24px rgba(80,60,40,0.18);font-family:inherit;text-align:left;';
     tip.innerHTML = `
@@ -2228,6 +2234,7 @@ function toggleVoice() {
         <div>按一次麥克風，就開始連續語音對話。</div>
         <div>說完話後稍微停頓，善緣會自動回應。</div>
         <div>按「結束對話」才停止。</div>
+        <div>結束談話後，請按「結束對話」或關閉網頁，讓麥克風停止使用、節省電量。</div>
         <div>談完時和善緣道別，說「再見」「bye」「結束」一類的用語，可觸發致贈「祈福禮」。每次對話只限一次，想要重新開始可刷新頁面。</div>
       </div>
       <button onclick="this.parentNode.remove();startVoiceConvo();" style="margin-top:16px;width:100%;padding:9px;background:#7a6a50;color:#fff;border:none;border-radius:8px;font-size:13px;letter-spacing:0.1em;cursor:pointer;">了解，開始對話</button>
@@ -2520,9 +2527,12 @@ async function handleRecordingDone(mimeType, mveBlob) {
       console.log(`[STT] 後端錯誤 ${resp.status}`);
       removeTyping();
       if (voiceConvoActive && !voiceStopRequested) {
+        sttUnavailable = true;
         setConvoStatus('語音辨識暫時不可用', false);
-        addMessage('assistant', '我這邊暫時沒有接上語音辨識，所以剛才沒有聽清楚。你可以先用文字輸入，或等語音辨識設定完成後再試。');
+        addMessage('assistant', '我這邊暫時沒有接上語音辨識，所以剛才沒有聽清楚。現在先暫停語音對話，避免一直重複錄音。你可以先用文字輸入；等語音辨識設定完成後，再開啟麥克風。');
         stopVoiceConvo();
+        document.getElementById('btn-voice').disabled = true;
+        document.getElementById('btn-voice').title = '語音辨識設定完成後再開啟';
       } else {
         showToast('語音辨識暫時不可用，請先用文字輸入');
         document.getElementById('btn-voice').disabled = false;
