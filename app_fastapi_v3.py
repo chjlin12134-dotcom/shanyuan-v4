@@ -99,7 +99,8 @@ def load_system_prompt() -> str:
 
 _base_prompt = load_system_prompt()
 SYSTEM_PROMPT = (
-    "【語言】你必須全程使用繁體中文回應，絕對不可以使用簡體中文。\n\n"
+    "【語言】你必須全程使用自然繁體中文回應，絕對不可以使用簡體中文、日文、英文或中英夾雜。除非使用者明確要求翻譯或討論外語，否則不要使用外語詞。\n\n"
+    "【語音誤辨處理】如果使用者文字看起來像語音辨識錯誤，例如突然出現日文、英文、歌手、歌名、詞曲、字幕或和脈絡無關的短句，不要順著解釋。請溫和說你可能沒有聽清楚，邀請對方再說一次。\n\n"
     "【重要】你的名字固定是「善緣」，不可以改名、不可以自稱其他名字。\n\n"
     "【回應長度】根據對方說話的份量來決定你的長度。對方只說一兩句，你也簡短回應（30-50字）；對方說了很多、問得很深，或請你介紹自己、多說一點，你可以回應多一些（80-120字）。不要每次都一樣長，要有自然的節奏感。但最多不超過 120 字。\n\n"
     "【語音節奏】你的回應是用聲音說出來的。每次回應，先用一個自然的短音開頭，例如「嗯，」「哦，」「是，」「好，」「這樣，」讓聲音馬上出來，不要一開口就是長句。\n\n"
@@ -165,6 +166,37 @@ def format_retrieved(items: list[dict]) -> str:
 def is_farewell(text: str) -> bool:
     return any(w in text.lower() for w in FAREWELL_WORDS)
 
+def sanitize_stt_transcript(text: str) -> str:
+    """Filter common Whisper hallucinations from noise/silence before they enter chat."""
+    text = (text or "").strip()
+    if not text:
+        return ""
+
+    compact = re.sub(r"[\s，。！？、,.!?：:；;「」『』（）()【】\[\]《》〈〉…~～\-—_]+", "", text)
+    if not compact:
+        return ""
+
+    # Japanese kana in a Chinese voice conversation is usually a noise hallucination.
+    if re.search(r"[\u3040-\u30ff]", compact):
+        print(f"[STT filter] kana/noise: {text}")
+        return ""
+
+    cjk_count = len(re.findall(r"[\u4e00-\u9fff]", compact))
+    latin_count = len(re.findall(r"[A-Za-z]", compact))
+    if cjk_count == 0 and latin_count > 0:
+        print(f"[STT filter] non-chinese/noise: {text}")
+        return ""
+
+    music_noise_terms = [
+        "李宗盛", "初音", "虛擬歌手", "詞曲", "作詞", "作曲", "編曲",
+        "歌手", "歌曲", "歌詞", "字幕", "翻譯", "謝謝觀看",
+    ]
+    if len(compact) <= 12 and any(term in compact for term in music_noise_terms):
+        print(f"[STT filter] music/noise: {text}")
+        return ""
+
+    return text
+
 def get_blessing(corpus: pd.DataFrame, conversation_text: str) -> dict | None:
     if corpus.empty:
         return None
@@ -180,6 +212,7 @@ async def _stream_groq(groq_key: str, system: str, messages: list[dict]):
     payload = {
         "model": GROQ_CHAT_MODEL,
         "stream": True,
+        "temperature": 0.35,
         "max_tokens": 150,
         "messages": [{"role": "system", "content": system}] + messages,
     }
@@ -211,6 +244,7 @@ async def _stream_go(go_key: str, system: str, messages: list[dict]):
     payload = {
         "model": GO_MODEL,
         "stream": True,
+        "temperature": 0.35,
         "max_tokens": 150,
         "messages": [{"role": "system", "content": system}] + messages,
     }
@@ -425,7 +459,7 @@ async def transcribe(file: UploadFile = File(...)):
             if resp.status_code == 200:
                 results = resp.json().get("results", [])
                 if results:
-                    transcript = results[0]["alternatives"][0]["transcript"].strip()
+                    transcript = sanitize_stt_transcript(results[0]["alternatives"][0]["transcript"].strip())
                     if transcript:
                         print(f"[STT Google] {transcript}")
                         return JSONResponse({"transcript": transcript})
@@ -440,11 +474,15 @@ async def transcribe(file: UploadFile = File(...)):
                 "https://api.groq.com/openai/v1/audio/transcriptions",
                 headers={"Authorization": f"Bearer {groq_key}"},
                 files={"file": (file.filename or "audio.webm", audio_bytes, "audio/webm" if (file.filename or "").endswith(".webm") else "audio/wav")},
-                data={"model": "whisper-large-v3-turbo", "language": "zh", "prompt": "以下是中文語音內容："},
+                data={
+                    "model": "whisper-large-v3-turbo",
+                    "language": "zh",
+                    "prompt": "以下是繁體中文日常對話。若只有雜音、音樂、歌詞、人名、日文或英文，請留空。",
+                },
             )
         result = resp.json()
         print(f"[STT Groq raw] status={resp.status_code} result={str(result)[:200]}")
-        transcript = result.get("text", "").strip()
+        transcript = sanitize_stt_transcript(result.get("text", "").strip())
         if transcript:
             print(f"[STT Groq] {transcript}")
             return JSONResponse({"transcript": transcript})
@@ -507,23 +545,44 @@ async def chat(request: Request):
     groq_key      = os.environ.get("GROQ_API_KEY", "")
     go_key        = os.environ.get("OPENCODE_GO_API_KEY", "")
 
+    async def stream_fallback_model():
+        if groq_key:
+            try:
+                async for delta in _stream_groq(groq_key, full_system, messages):
+                    yield delta
+                return
+            except RuntimeError:
+                if not go_key:
+                    raise
+        if go_key:
+            async for delta in _stream_go(go_key, full_system, messages):
+                yield delta
+            return
+        raise RuntimeError("no fallback chat model key configured")
+
     async def generate():
         full_response = ""
         try:
-            if farewell:
-                print(f"[chat] farewell -> {BLESSING_MODEL}")
-                client = anthropic.Anthropic(api_key=anthropic_key)
-                with client.messages.stream(
-                    model=BLESSING_MODEL,
-                    max_tokens=150,
-                    system=full_system,
-                    messages=messages,
-                ) as stream:
-                    for text in stream.text_stream:
-                        full_response += text
-                        yield "data: " + json.dumps({"type": "token", "text": text}, ensure_ascii=False) + "\n\n"
+            if farewell and anthropic_key:
+                try:
+                    print(f"[chat] farewell -> {BLESSING_MODEL}")
+                    client = anthropic.Anthropic(api_key=anthropic_key)
+                    with client.messages.stream(
+                        model=BLESSING_MODEL,
+                        max_tokens=150,
+                        system=full_system,
+                        messages=messages,
+                    ) as stream:
+                        for text in stream.text_stream:
+                            full_response += text
+                            yield "data: " + json.dumps({"type": "token", "text": text}, ensure_ascii=False) + "\n\n"
+                except Exception as e:
+                    print(f"[chat] anthropic farewell failed -> fallback: {e}")
+                    async for delta in stream_fallback_model():
+                        full_response += delta
+                        yield "data: " + json.dumps({"type": "token", "text": delta}, ensure_ascii=False) + "\n\n"
 
-            elif CHAT_MODEL_TIER == "premium":
+            elif CHAT_MODEL_TIER == "premium" and anthropic_key:
                 print(f"[chat] premium -> {PREMIUM_MODEL}")
                 client = anthropic.Anthropic(api_key=anthropic_key)
                 with client.messages.stream(
@@ -537,20 +596,17 @@ async def chat(request: Request):
                         yield "data: " + json.dumps({"type": "token", "text": text}, ensure_ascii=False) + "\n\n"
 
             elif groq_key:
-                try:
-                    async for delta in _stream_groq(groq_key, full_system, messages):
-                        full_response += delta
-                        yield "data: " + json.dumps({"type": "token", "text": delta}, ensure_ascii=False) + "\n\n"
-                except RuntimeError:
-                    # 429 fallback to Go
-                    async for delta in _stream_go(go_key, full_system, messages):
-                        full_response += delta
-                        yield "data: " + json.dumps({"type": "token", "text": delta}, ensure_ascii=False) + "\n\n"
+                async for delta in stream_fallback_model():
+                    full_response += delta
+                    yield "data: " + json.dumps({"type": "token", "text": delta}, ensure_ascii=False) + "\n\n"
 
-            else:
+            elif go_key:
                 async for delta in _stream_go(go_key, full_system, messages):
                     full_response += delta
                     yield "data: " + json.dumps({"type": "token", "text": delta}, ensure_ascii=False) + "\n\n"
+
+            else:
+                raise RuntimeError("no chat model key configured")
 
             if farewell:
                 full_conv = " ".join(m["content"] for m in messages if m["role"] == "user")
