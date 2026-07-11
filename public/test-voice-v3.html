@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>善緣 · 語音版測試包</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Noto Serif TC", "思源宋體", "Times New Roman", serif;
+  background: #faf6ee;
+  color: #2e2820;
+  line-height: 1.9;
+  padding: 40px 24px;
+}
+.container {
+  max-width: 740px;
+  margin: 0 auto;
+}
+
+/* 封面 */
+.cover {
+  text-align: center;
+  padding: 48px 0 36px;
+  border-bottom: 2px solid #c8b89a;
+  margin-bottom: 40px;
+}
+.cover h1 { font-size: 32px; letter-spacing: 0.4em; color: #4a3520; margin-bottom: 10px; }
+.cover .sub { font-size: 15px; color: #8a7050; letter-spacing: 0.1em; }
+.cover .version { font-size: 12px; color: #b0a080; margin-top: 8px; font-style: italic; }
+
+/* 區塊標題 */
+.section { margin-bottom: 44px; }
+h2 {
+  font-size: 17px;
+  color: #4a3520;
+  border-left: 4px solid #c8a060;
+  padding-left: 12px;
+  margin-bottom: 16px;
+  margin-top: 32px;
+  letter-spacing: 0.05em;
+}
+h3 {
+  font-size: 14px;
+  color: #6a5030;
+  margin: 20px 0 8px;
+  font-weight: bold;
+}
+
+p { margin-bottom: 12px; font-size: 14px; }
+
+/* 網址 */
+.url-box {
+  background: #f0e8d4;
+  border: 1px solid #c8b48a;
+  border-radius: 4px;
+  padding: 12px 20px;
+  font-size: 15px;
+  color: #4a6080;
+  letter-spacing: 0.05em;
+  margin: 12px 0 20px;
+  text-align: center;
+  font-weight: bold;
+}
+
+/* 步驟列表 */
+ol, ul { padding-left: 24px; margin-bottom: 12px; }
+li { font-size: 14px; margin-bottom: 6px; }
+
+/* 話題方框 */
+.topic-box {
+  background: #f5efe2;
+  border-left: 4px solid #b09060;
+  border-radius: 0 4px 4px 0;
+  padding: 16px 20px;
+  margin: 16px 0;
+}
+.topic-box .topic-item {
+  font-size: 13.5px;
+  margin-bottom: 10px;
+  color: #3a2e20;
+}
+.topic-box .topic-item strong { color: #7a5830; }
+
+/* 分隔線 */
+hr { border: none; border-top: 1px solid #d4c8b0; margin: 32px 0; }
+
+/* 觀察清單 */
+.checklist { margin: 0; padding: 0; list-style: none; }
+.checklist li {
+  padding: 7px 0 7px 32px;
+  position: relative;
+  border-bottom: 1px dashed #e0d4bc;
+  font-size: 13.5px;
+}
+.checklist li::before {
+  content: "□";
+  position: absolute;
+  left: 6px;
+  color: #c8a060;
+  font-size: 16px;
+  top: 6px;
+}
+
+/* 回饋表單 */
+.form-list { list-style: none; padding: 0; margin: 16px 0; }
+.form-item {
+  background: #faf5ec;
+  border: 1px solid #d8ccb4;
+  border-radius: 6px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.form-item:nth-child(even) { background: #f3ede0; }
+.form-item .q-label {
+  font-size: 14px;
+  font-weight: bold;
+  color: #3a2e20;
+  margin-bottom: 4px;
+}
+.form-item .q-hint {
+  font-size: 12px;
+  color: #9a8060;
+  font-style: italic;
+  margin-bottom: 8px;
+}
+.form-item textarea {
+  width: 100%;
+  min-height: 64px;
+  border: 1px solid #c8b89a;
+  border-radius: 4px;
+  background: rgba(255,252,245,0.9);
+  font-family: "Noto Serif TC", serif;
+  font-size: 14px;
+  color: #2e2820;
+  padding: 8px 12px;
+  resize: vertical;
+  outline: none;
+  line-height: 1.7;
+}
+.form-item textarea:focus {
+  border-color: #a08050;
+  box-shadow: 0 0 0 3px rgba(180,140,80,0.12);
+}
+.rating-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.rating-row label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  cursor: pointer;
+  background: rgba(255,252,245,0.9);
+  border: 1px solid #c8b89a;
+  border-radius: 20px;
+  padding: 5px 14px;
+  transition: all 0.18s;
+}
+.rating-row input[type=radio] { display: none; }
+.rating-row input[type=radio]:checked + span {
+  font-weight: bold;
+  color: #7a5020;
+}
+.rating-row label:has(input:checked) {
+  background: #e8d8b0;
+  border-color: #a08050;
+}
+
+/* 複製按鈕 */
+.copy-btn {
+  display: block;
+  margin: 20px auto 0;
+  background: linear-gradient(160deg, rgba(140,110,60,0.85), rgba(110,85,40,0.9));
+  color: #faf5ec;
+  border: none;
+  border-radius: 4px;
+  padding: 11px 32px;
+  font-family: "Noto Serif TC", serif;
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(100,70,30,0.2);
+}
+.copy-btn:active { opacity: 0.8; }
+
+/* 頁尾 */
+.footer {
+  text-align: center;
+  margin-top: 48px;
+  padding-top: 20px;
+  border-top: 1px solid #d4c8b0;
+  font-size: 12px;
+  color: #b0a080;
+  letter-spacing: 0.08em;
+}
+
+@media print {
+  body { background: white; padding: 0; }
+  .url-box { background: #f5f0e8; }
+  .topic-box { background: #f8f4ec; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- 封面 -->
+  <div class="cover">
+    <h1><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60" style="width:1em;height:1em;vertical-align:middle;"><ellipse cx="30" cy="46" rx="16" ry="10" fill="#3d6b35" opacity="0.85" transform="rotate(-10,30,46)"/><path d="M30 36 C16 44 14 46 14 46" stroke="#2a4a22" stroke-width="1.2" fill="none" opacity="0.7"/><path d="M30 36 C44 44 46 46 46 46" stroke="#2a4a22" stroke-width="1.2" fill="none" opacity="0.7"/><path d="M30 38 C16 28 12 12 22 5 C26 2 30 6 30 6 C30 6 34 2 38 5 C48 12 44 28 30 38Z" fill="#c0607a" opacity="0.90"/><path d="M30 35 C20 24 18 10 26 5 C28 4 30 6 30 6 C30 6 32 4 34 5 C42 10 40 24 30 35Z" fill="#e8809a" opacity="0.92"/><path d="M30 32 C24 22 23 12 28 7 C29 6 30 7 30 7 C30 7 31 6 32 7 C37 12 36 22 30 32Z" fill="#f8dde5" opacity="0.95"/><circle cx="30" cy="24" r="4.5" fill="#e8b820" opacity="0.90"/><circle cx="30" cy="24" r="2.5" fill="#f5d040" opacity="1"/></svg> 善 緣</h1>
+    <div class="sub">人間佛教精神的 AI 陪伴助理　·　真人測試包</div>
+    <div class="version">v1.1　2026 年 6 月</div>
+  </div>
+
+  <!-- 一、給測試者 -->
+  <div class="section">
+    <h2>一、給測試者的話</h2>
+    <p>謝謝你願意花時間陪善緣走這一段。善緣是一個 AI 陪伴助理，以星雲大師人間佛教精神為基礎，希望給每一個需要說說話的人，一個溫暖的陪伴空間。你不需要是佛教徒，不需要有特定的問題，只要願意開口就好。</p>
+    <p>這次測試沒有對錯，你的真實感受就是最重要的回饋。</p>
+
+    <h3>善緣的網址</h3>
+    <div class="url-box"><a href="https://june-lin-shanyuan-v3.hf.space" target="_blank" style="color:#4a6080;text-decoration:none;font-weight:bold;">https://june-lin-shanyuan-v3.hf.space</a></div>
+
+    <h3>怎麼開始</h3>
+    <ol>
+      <li>請用電腦或手機的 <strong>Chrome 或 Safari</strong> 開啟網址（請勿在 LINE 內直接開啟）</li>
+      <li>善緣會先打招呼，這是語音版——請直接說話，或在下方輸入文字</li>
+      <li>自然聊就好，不需要按照任何格式</li>
+      <li>結束時「再見」或「拜拜」，善緣會送你一份祈福禮——準備好了再點開</li>
+      <li>整個對話大約 10–20 分鐘，沒有時間限制</li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <!-- 二、建議話題 -->
+  <div class="section">
+    <h2>二、建議測試話題（選一個你有感覺的就好）</h2>
+    <p>你可以帶著自己真實的事情去說，也可以用以下其中一個話題開始：</p>
+
+    <div class="topic-box">
+      <div class="topic-item"><strong>【生活壓力】</strong>　最近有一件讓我很累的事……</div>
+      <div class="topic-item"><strong>【人際關係】</strong>　有一段關係讓我覺得很難開口……</div>
+      <div class="topic-item"><strong>【人生低潮】</strong>　有時候我覺得不知道自己在做什麼……</div>
+      <div class="topic-item"><strong>【失去與思念】</strong>　我想起一個離開的人……</div>
+      <div class="topic-item" style="margin-bottom:0"><strong>【說不清楚也沒關係】</strong>　你就說「我最近有點悶，但說不清楚」，看善緣怎麼陪你</div>
+    </div>
+    <p style="font-size:13px; color:#8a7050;">（沒有哪個話題比較好，你說什麼善緣都接。）</p>
+  </div>
+
+  <hr>
+
+  <!-- 三、觀察重點清單 -->
+  <div class="section">
+    <h2>三、觀察重點清單（測試協調者用）</h2>
+    <p style="font-size:13px; color:#6a5a40;">如果你在旁邊陪同觀察，請注意以下幾個面向：</p>
+
+    <h3>對話品質</h3>
+    <ul class="checklist">
+      <li>善緣有沒有真的「接住」測試者說的話，還是只是在回答？</li>
+      <li>善緣有沒有問太多問題，或讓對話空間太冷？</li>
+      <li>有沒有出現不合宜的詞彙（標籤化、說教、比慘、鼓勵口號）？</li>
+      <li>測試者說完話之後，表情或身體語言是什麼反應？</li>
+    </ul>
+
+    <h3>功能面</h3>
+    <ul class="checklist">
+      <li>語音輸入有沒有正確辨識？（尤其台語腔、口音）</li>
+      <li>善緣說話的語速、語調聽起來自然嗎？會不會太快或太機器感？</li>
+      <li>從說完話到善緣開始回應，等待時間在可接受範圍內嗎？</li>
+      <li>手機版畫面有沒有跑版或顯示異常？</li>
+      <li>道別時「點一下收祈福禮」有沒有出現？測試者的反應是？</li>
+      <li>整體等待時間可接受嗎？有沒有明顯卡頓？</li>
+    </ul>
+
+    <h3>意外情況（請完整記錄）</h3>
+    <ul class="checklist">
+      <li>善緣有沒有說出讓人覺得不妥的話？請完整記下原文</li>
+      <li>測試者有沒有說出「這不像真人」？是在哪一句之後？</li>
+      <li>有沒有觸碰到危機話題（情緒低落、提到傷害自己）？善緣怎麼回應？</li>
+    </ul>
+  </div>
+
+  <hr>
+
+  <!-- 四、回饋表單 -->
+  <div class="section">
+    <h2>四、回饋表單（對話後填寫）</h2>
+    <p>請在對話結束後，趁印象還新鮮時填寫。幾個字也好。</p>
+
+    <ul class="form-list">
+      <li class="form-item">
+        <div class="q-label">1. 你是誰？（一句話就好）</div>
+        <div class="q-hint">例：上班族、學生、照顧者……</div>
+        <textarea id="q1" placeholder="請輸入……"></textarea>
+      </li>
+      <li class="form-item">
+        <div class="q-label">2. 和善緣聊了多久？</div>
+        <textarea id="q2" placeholder="請輸入……" style="min-height:48px"></textarea>
+      </li>
+      <li class="form-item">
+        <div class="q-label">3. 整體感受如何？</div>
+        <div class="q-hint">1＝完全沒有被陪伴的感覺　5＝很有被陪伴的感覺</div>
+        <div class="rating-row" id="q3">
+          <label><input type="radio" name="q3" value="1"><span>1　很差</span></label>
+          <label><input type="radio" name="q3" value="2"><span>2</span></label>
+          <label><input type="radio" name="q3" value="3"><span>3　普通</span></label>
+          <label><input type="radio" name="q3" value="4"><span>4</span></label>
+          <label><input type="radio" name="q3" value="5"><span>5　很好</span></label>
+        </div>
+      </li>
+      <li class="form-item">
+        <div class="q-label">4. 善緣最讓你印象深刻的一句話？</div>
+        <textarea id="q4" placeholder="請輸入……"></textarea>
+      </li>
+      <li class="form-item">
+        <div class="q-label">5. 有沒有哪句話讓你覺得「這不對」或「不舒服」？</div>
+        <div class="q-hint">非常重要，請直接寫下來</div>
+        <textarea id="q5" placeholder="沒有的話寫「無」即可"></textarea>
+      </li>
+      <li class="form-item">
+        <div class="q-label">6. 祈福禮卡片你有點開嗎？感覺如何？</div>
+        <textarea id="q6" placeholder="請輸入……"></textarea>
+      </li>
+      <li class="form-item">
+        <div class="q-label">7. 你會想再來和善緣聊嗎？</div>
+        <div class="q-hint">1＝不會　5＝很想</div>
+        <div class="rating-row" id="q7">
+          <label><input type="radio" name="q7" value="1"><span>1　不會</span></label>
+          <label><input type="radio" name="q7" value="2"><span>2</span></label>
+          <label><input type="radio" name="q7" value="3"><span>3　也許</span></label>
+          <label><input type="radio" name="q7" value="4"><span>4</span></label>
+          <label><input type="radio" name="q7" value="5"><span>5　很想</span></label>
+        </div>
+      </li>
+      <li class="form-item">
+        <div class="q-label">8. 如果可以改一件事，你希望改什麼？</div>
+        <textarea id="q8" placeholder="請輸入……"></textarea>
+      </li>
+      <li class="form-item">
+        <div class="q-label">9. 還有什麼想說的？</div>
+        <textarea id="q9" placeholder="請輸入……"></textarea>
+      </li>
+    </ul>
+
+    <button class="copy-btn" onclick="copyAnswers()">📋　複製回饋內容，傳給我</button>
+    <p id="copy-msg" style="text-align:center;font-size:13px;color:#8a6040;margin-top:8px;display:none;">已複製！貼到 LINE / Email 傳給善緣開發者即可 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60" style="width:1em;height:1em;vertical-align:middle;"><ellipse cx="30" cy="46" rx="16" ry="10" fill="#3d6b35" opacity="0.85" transform="rotate(-10,30,46)"/><path d="M30 36 C16 44 14 46 14 46" stroke="#2a4a22" stroke-width="1.2" fill="none" opacity="0.7"/><path d="M30 36 C44 44 46 46 46 46" stroke="#2a4a22" stroke-width="1.2" fill="none" opacity="0.7"/><path d="M30 38 C16 28 12 12 22 5 C26 2 30 6 30 6 C30 6 34 2 38 5 C48 12 44 28 30 38Z" fill="#c0607a" opacity="0.90"/><path d="M30 35 C20 24 18 10 26 5 C28 4 30 6 30 6 C30 6 32 4 34 5 C42 10 40 24 30 35Z" fill="#e8809a" opacity="0.92"/><path d="M30 32 C24 22 23 12 28 7 C29 6 30 7 30 7 C30 7 31 6 32 7 C37 12 36 22 30 32Z" fill="#f8dde5" opacity="0.95"/><circle cx="30" cy="24" r="4.5" fill="#e8b820" opacity="0.90"/><circle cx="30" cy="24" r="2.5" fill="#f5d040" opacity="1"/></svg></p>
+  </div>
+
+  <div class="footer">── 謝謝你的回饋，善緣因你而更好 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60" style="width:1em;height:1em;vertical-align:middle;"><ellipse cx="30" cy="46" rx="16" ry="10" fill="#3d6b35" opacity="0.85" transform="rotate(-10,30,46)"/><path d="M30 36 C16 44 14 46 14 46" stroke="#2a4a22" stroke-width="1.2" fill="none" opacity="0.7"/><path d="M30 36 C44 44 46 46 46 46" stroke="#2a4a22" stroke-width="1.2" fill="none" opacity="0.7"/><path d="M30 38 C16 28 12 12 22 5 C26 2 30 6 30 6 C30 6 34 2 38 5 C48 12 44 28 30 38Z" fill="#c0607a" opacity="0.90"/><path d="M30 35 C20 24 18 10 26 5 C28 4 30 6 30 6 C30 6 32 4 34 5 C42 10 40 24 30 35Z" fill="#e8809a" opacity="0.92"/><path d="M30 32 C24 22 23 12 28 7 C29 6 30 7 30 7 C30 7 31 6 32 7 C37 12 36 22 30 32Z" fill="#f8dde5" opacity="0.95"/><circle cx="30" cy="24" r="4.5" fill="#e8b820" opacity="0.90"/><circle cx="30" cy="24" r="2.5" fill="#f5d040" opacity="1"/></svg> ──</div>
+
+</div>
+
+<script>
+function copyAnswers() {
+  const labels = [
+    "1. 你是誰",
+    "2. 聊了多久",
+    "3. 整體感受（1-5）",
+    "4. 印象深刻的一句話",
+    "5. 不舒服的話",
+    "6. 祈福禮感覺",
+    "7. 會再來嗎（1-5）",
+    "8. 希望改的一件事",
+    "9. 其他"
+  ];
+  const ids = ["q1","q2","q3","q4","q5","q6","q7","q8","q9"];
+  let text = "【善緣測試回饋】\n\n";
+  ids.forEach((id, i) => {
+    let val = "";
+    if (id === "q3" || id === "q7") {
+      const checked = document.querySelector(`input[name="${id}"]:checked`);
+      val = checked ? checked.value + " 分" : "（未選）";
+    } else {
+      val = document.getElementById(id).value.trim() || "（未填）";
+    }
+    text += `${labels[i]}：${val}\n\n`;
+  });
+  navigator.clipboard.writeText(text).then(() => {
+    document.getElementById("copy-msg").style.display = "block";
+    setTimeout(() => document.getElementById("copy-msg").style.display = "none", 4000);
+  }).catch(() => {
+    alert("請手動複製以下內容：\n\n" + text);
+  });
+}
+</script>
+</body>
+</html>
