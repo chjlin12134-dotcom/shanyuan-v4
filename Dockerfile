@@ -12,6 +12,6 @@ COPY system_prompt.md .
 COPY shanyuan_corpus.csv .
 COPY public/ public/
 
-EXPOSE 8000
+EXPOSE 8080
 
-CMD ["uvicorn", "app_fastapi_v3:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD uvicorn app_fastapi_v3:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1
