@@ -11,8 +11,8 @@
 <meta property="og:url" content="https://shanyuan-v4-483571107702.asia-east1.run.app/">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="zh_TW">
-<meta property="og:image" content="https://shanyuan-v4-483571107702.asia-east1.run.app/og-image.png?v=20260711v4b">
-<meta property="og:image:secure_url" content="https://shanyuan-v4-483571107702.asia-east1.run.app/og-image.png?v=20260711v4b">
+<meta property="og:image" content="https://shanyuan-v4-483571107702.asia-east1.run.app/og-image.png">
+<meta property="og:image:secure_url" content="https://shanyuan-v4-483571107702.asia-east1.run.app/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:site_name" content="人間善緣">
@@ -20,7 +20,7 @@
 <meta name="twitter:title" content="心燈一盞，伴您前行">
 <meta name="twitter:description" content="來時傾談心安住
 臨別贈禮智慧隨">
-<meta name="twitter:image" content="https://shanyuan-v4-483571107702.asia-east1.run.app/og-image.png?v=20260711v4b">
+<meta name="twitter:image" content="https://shanyuan-v4-483571107702.asia-east1.run.app/og-image.png">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'><ellipse cx='30' cy='46' rx='16' ry='10' fill='%233d6b35' opacity='0.85' transform='rotate(-10,30,46)'/><path d='M30 36 C16 44 14 46 14 46' stroke='%232a4a22' stroke-width='1.2' fill='none' opacity='0.7'/><path d='M30 36 C44 44 46 46 46 46' stroke='%232a4a22' stroke-width='1.2' fill='none' opacity='0.7'/><path d='M30 38 C16 28 12 12 22 5 C26 2 30 6 30 6 C30 6 34 2 38 5 C48 12 44 28 30 38Z' fill='%23c0607a' opacity='0.90'/><path d='M30 35 C20 24 18 10 26 5 C28 4 30 6 30 6 C30 6 32 4 34 5 C42 10 40 24 30 35Z' fill='%23e8809a' opacity='0.92'/><path d='M30 32 C24 22 23 12 28 7 C29 6 30 7 30 7 C30 7 31 6 32 7 C37 12 36 22 30 32Z' fill='%23f8dde5' opacity='0.95'/><circle cx='30' cy='24' r='4.5' fill='%23e8b820' opacity='0.90'/><circle cx='30' cy='24' r='2.5' fill='%23f5d040' opacity='1'/></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -696,14 +696,23 @@ body.line-active .btn-info-mobile { opacity: 0.55; }
 #warmup-overlay {
   display: none;
   position: fixed; inset: 0; z-index: 9998;
-  background: rgba(242,235,220,0.93);
+  background:
+    radial-gradient(circle at 50% 45%, rgba(255,255,250,0.92) 0%, rgba(245,240,232,0.82) 35%, rgba(232,225,214,0.96) 100%),
+    rgba(242,235,220,0.93);
   flex-direction: column; align-items: center; justify-content: center;
   gap: 16px; text-align: center; padding: 32px;
 }
-#warmup-overlay .warmup-icon { font-size: 44px; animation: warmup-spin 2s linear infinite; }
-@keyframes warmup-spin { to { transform: rotate(360deg); } }
-#warmup-overlay .warmup-title { font-size: 18px; font-weight: 600; color: #3a3020; }
-#warmup-overlay .warmup-sub   { font-size: 14px; color: #7a6a50; line-height: 1.8; }
+#warmup-overlay .warmup-icon {
+  width: 116px; height: 116px;
+  opacity: 0.9;
+  animation: warmup-breathe 2.8s ease-in-out infinite;
+}
+@keyframes warmup-breathe {
+  0%, 100% { transform: scale(0.96); opacity: 0.78; }
+  50% { transform: scale(1.04); opacity: 1; }
+}
+#warmup-overlay .warmup-title { font-size: 22px; font-weight: 500; color: #3a3020; letter-spacing: 0.08em; }
+#warmup-overlay .warmup-sub   { font-size: 15px; color: #7a6a50; line-height: 1.8; }
 #warmup-overlay .warmup-bar-wrap {
   width: 200px; height: 6px; background: rgba(150,130,100,0.2); border-radius: 3px; overflow: hidden;
 }
@@ -744,9 +753,21 @@ body.line-active .btn-info-mobile { opacity: 0.55; }
 
 <!-- 暖機提示 overlay -->
 <div id="warmup-overlay">
-  <div class="warmup-icon">🌸</div>
-  <div class="warmup-title">善緣正在甦醒中……</div>
-  <div class="warmup-sub">伺服器首次啟動需要 30–60 秒<br>請稍候，很快就好</div>
+  <svg class="warmup-icon" viewBox="0 0 160 160" aria-hidden="true">
+    <defs>
+      <radialGradient id="warmLotusPetal" cx="50%" cy="35%" r="70%">
+        <stop offset="0%" stop-color="#fff7ef"/>
+        <stop offset="45%" stop-color="#d88aa0"/>
+        <stop offset="100%" stop-color="#9d5f73"/>
+      </radialGradient>
+    </defs>
+    <ellipse cx="80" cy="126" rx="34" ry="14" fill="#466942" opacity="0.75"/>
+    <path d="M80 118 C54 98 46 54 67 35 C75 28 80 40 80 40 C80 40 85 28 93 35 C114 54 106 98 80 118Z" fill="url(#warmLotusPetal)" opacity="0.95"/>
+    <path d="M80 116 C43 105 30 72 45 54 C56 41 72 61 80 76 C88 61 104 41 115 54 C130 72 117 105 80 116Z" fill="#c9788d" opacity="0.72"/>
+    <circle cx="80" cy="82" r="9" fill="#e6bd55" opacity="0.95"/>
+  </svg>
+  <div class="warmup-title">善緣準備中</div>
+  <div class="warmup-sub">首次開啟可能需要一點時間<br>請稍候片刻</div>
   <div class="warmup-bar-wrap"><div class="warmup-bar" id="warmup-bar"></div></div>
 </div>
 
@@ -2210,7 +2231,6 @@ let hasSpeech = false; // 本輪錄音是否偵測到真實說話聲
 let interruptStream = null;
 let interruptCtx = null;
 let voiceTipShownThisPage = false;
-let sttUnavailable = false;
 // 手機：持久化 mic stream，避免每輪 getUserMedia 造成 Android stream 耗盡
 let persistentMicStream = null;
 function stopInterruptDetect() {
@@ -2219,10 +2239,6 @@ function stopInterruptDetect() {
 }
 
 function toggleVoice() {
-  if (sttUnavailable) {
-    addMessage('assistant', '語音辨識還沒有設定完成，所以現在先暫停語音對話。可以先用文字輸入；等語音辨識金鑰接上後，再開啟麥克風。');
-    return;
-  }
   if (mediaRecorder && mediaRecorder.state === 'recording') { stopRecording(); return; }
   if (!voiceTipShownThisPage) {
     voiceTipShownThisPage = true;
@@ -2231,11 +2247,9 @@ function toggleVoice() {
     tip.innerHTML = `
       <div style="font-size:15px;font-weight:500;color:#3a3228;margin-bottom:12px;letter-spacing:0.05em;">🎙 語音對話說明</div>
       <div style="font-size:13px;color:#5a4a38;line-height:1.8;">
-        <div>按一次麥克風，就開始連續語音對話。</div>
-        <div>說完話後稍微停頓，善緣會自動回應。</div>
-        <div>按「結束對話」才停止。</div>
-        <div>結束談話後，請按「結束對話」或關閉網頁，讓麥克風停止使用、節省電量。</div>
-        <div>談完時和善緣道別，說「再見」「bye」「結束」一類的用語，可觸發致贈「祈福禮」。每次對話只限一次，想要重新開始可刷新頁面。</div>
+        <div>1. 按一次麥克風，即可開始連續語音對話。</div>
+        <div>2. 說完稍停，善緣會自動回應；文字輸入只是備用。</div>
+        <div>3. 結束後請按「結束對話」或關閉網頁，以停止麥克風、節省電量。</div>
       </div>
       <button onclick="this.parentNode.remove();startVoiceConvo();" style="margin-top:16px;width:100%;padding:9px;background:#7a6a50;color:#fff;border:none;border-radius:8px;font-size:13px;letter-spacing:0.1em;cursor:pointer;">了解，開始對話</button>
     `;
@@ -2527,12 +2541,9 @@ async function handleRecordingDone(mimeType, mveBlob) {
       console.log(`[STT] 後端錯誤 ${resp.status}`);
       removeTyping();
       if (voiceConvoActive && !voiceStopRequested) {
-        sttUnavailable = true;
         setConvoStatus('語音辨識暫時不可用', false);
-        addMessage('assistant', '我這邊暫時沒有接上語音辨識，所以剛才沒有聽清楚。現在先暫停語音對話，避免一直重複錄音。你可以先用文字輸入；等語音辨識設定完成後，再開啟麥克風。');
+        addMessage('assistant', '我這邊暫時沒有接上語音辨識，所以剛才沒有聽清楚。語音辨識設定完成後，就可以恢復連續語音對話。');
         stopVoiceConvo();
-        document.getElementById('btn-voice').disabled = true;
-        document.getElementById('btn-voice').title = '語音辨識設定完成後再開啟';
       } else {
         showToast('語音辨識暫時不可用，請先用文字輸入');
         document.getElementById('btn-voice').disabled = false;
