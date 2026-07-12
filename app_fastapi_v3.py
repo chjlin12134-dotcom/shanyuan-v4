@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import re
 import json
+import uuid
 from collections import Counter
 from pathlib import Path
 
@@ -24,6 +25,17 @@ try:
     load_dotenv(Path(__file__).parent / ".env")
 except ImportError:
     pass
+
+
+def log_event(event: str, **fields):
+    """Structured Cloud Run log without API keys or full private conversation."""
+    safe_fields = {}
+    for key, value in fields.items():
+        if value is None:
+            continue
+        text = str(value)
+        safe_fields[key] = text[:300]
+    print(json.dumps({"event": event, **safe_fields}, ensure_ascii=False), flush=True)
 
 BASE_DIR      = Path(__file__).parent
 CORPUS_CSV    = BASE_DIR / "shanyuan_corpus.csv"
@@ -207,9 +219,9 @@ def get_blessing(corpus: pd.DataFrame, conversation_text: str) -> dict | None:
     return items[0]
 
 
-async def _stream_groq(groq_key: str, system: str, messages: list[dict]):
+async def _stream_groq(groq_key: str, system: str, messages: list[dict], request_id: str = ""):
     """Groq async generator. Yields tokens, or raises RuntimeError('429') on rate limit."""
-    print(f"[chat] groq -> {GROQ_CHAT_MODEL}")
+    log_event("chat_model_start", request_id=request_id, provider="groq", model=GROQ_CHAT_MODEL)
     payload = {
         "model": GROQ_CHAT_MODEL,
         "stream": True,
@@ -222,10 +234,15 @@ async def _stream_groq(groq_key: str, system: str, messages: list[dict]):
         headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
         json=payload,
     ) as resp:
+        log_event("chat_model_status", request_id=request_id, provider="groq", model=GROQ_CHAT_MODEL, status=resp.status_code)
         if resp.status_code == 429:
-            print("[chat] groq 429 -> fallback to Go API")
+            body = (await resp.aread()).decode("utf-8", errors="replace")
+            log_event("chat_model_rate_limited", request_id=request_id, provider="groq", model=GROQ_CHAT_MODEL, status=resp.status_code, body=body)
             raise RuntimeError("429")
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            body = (await resp.aread()).decode("utf-8", errors="replace")
+            log_event("chat_model_http_error", request_id=request_id, provider="groq", model=GROQ_CHAT_MODEL, status=resp.status_code, body=body)
+            resp.raise_for_status()
         async for line in resp.aiter_lines():
             if not line or line == "data: [DONE]":
                 continue
@@ -239,9 +256,9 @@ async def _stream_groq(groq_key: str, system: str, messages: list[dict]):
                     continue
 
 
-async def _stream_go(go_key: str, system: str, messages: list[dict]):
+async def _stream_go(go_key: str, system: str, messages: list[dict], request_id: str = ""):
     """OpenCode Go API async generator."""
-    print(f"[chat] go api -> {GO_MODEL}")
+    log_event("chat_model_start", request_id=request_id, provider="opencode_go", model=GO_MODEL)
     payload = {
         "model": GO_MODEL,
         "stream": True,
@@ -255,7 +272,11 @@ async def _stream_go(go_key: str, system: str, messages: list[dict]):
         headers={"Authorization": f"Bearer {go_key}", "Content-Type": "application/json"},
         json=payload,
     ) as resp:
-        resp.raise_for_status()
+        log_event("chat_model_status", request_id=request_id, provider="opencode_go", model=GO_MODEL, status=resp.status_code)
+        if resp.status_code >= 400:
+            body = (await resp.aread()).decode("utf-8", errors="replace")
+            log_event("chat_model_http_error", request_id=request_id, provider="opencode_go", model=GO_MODEL, status=resp.status_code, body=body)
+            resp.raise_for_status()
         async for line in resp.aiter_lines():
             if not line or line == "data: [DONE]":
                 continue
@@ -445,10 +466,12 @@ async def tts(request: Request):
 @app.post("/transcribe")
 async def transcribe(file: UploadFile = File(...)):
     import base64
+    request_id = uuid.uuid4().hex[:10]
     google_stt_key = os.environ.get("GOOGLE_STT_API_KEY", "")
     # STT 用獨立的 Groq key，避免跟 /chat 共用同一組配額，語音對話密集時互相搶額度觸發 429
     groq_key = os.environ.get("GROQ_STT_API_KEY") or os.environ.get("GROQ_API_KEY", "")
     audio_bytes = await file.read()
+    log_event("stt_request", request_id=request_id, filename=file.filename or "", bytes=len(audio_bytes), has_google=bool(google_stt_key), has_groq=bool(groq_key))
 
     if google_stt_key:
         try:
@@ -476,10 +499,10 @@ async def transcribe(file: UploadFile = File(...)):
                 if results:
                     transcript = sanitize_stt_transcript(results[0]["alternatives"][0]["transcript"].strip())
                     if transcript:
-                        print(f"[STT Google] {transcript}")
+                        log_event("stt_success", request_id=request_id, provider="google", transcript_len=len(transcript))
                         return JSONResponse({"transcript": transcript})
         except Exception as e:
-            print(f"[STT Google error] {e}")
+            log_event("stt_failed", request_id=request_id, provider="google", error_type=type(e).__name__, error=e)
 
     if not groq_key:
         return JSONResponse({"error": "no STT service"}, status_code=500)
@@ -496,20 +519,22 @@ async def transcribe(file: UploadFile = File(...)):
                 },
             )
         result = resp.json()
-        print(f"[STT Groq raw] status={resp.status_code} result={str(result)[:200]}")
+        err_msg = result.get("error", {}).get("message", "") if isinstance(result.get("error"), dict) else str(result.get("error", ""))
+        log_event("stt_status", request_id=request_id, provider="groq", status=resp.status_code, has_text=bool(result.get("text", "").strip()), error=err_msg)
         transcript = sanitize_stt_transcript(result.get("text", "").strip())
         if transcript:
-            print(f"[STT Groq] {transcript}")
+            log_event("stt_success", request_id=request_id, provider="groq", transcript_len=len(transcript))
             return JSONResponse({"transcript": transcript})
         # 空字串或 Groq 錯誤：回 200+空 transcript，前端重新聆聽，不中斷對話
-        err_msg = result.get("error", {}).get("message", "") if isinstance(result.get("error"), dict) else str(result.get("error", ""))
-        print(f"[STT Groq empty] err={err_msg}")
+        log_event("stt_empty", request_id=request_id, provider="groq", status=resp.status_code, error=err_msg)
         return JSONResponse({"transcript": ""})
     except Exception as e:
+        log_event("stt_failed", request_id=request_id, provider="groq", error_type=type(e).__name__, error=e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.post("/chat")
 async def chat(request: Request):
+    request_id = uuid.uuid4().hex[:10]
     body = await request.json()
     messages: list[dict] = body.get("messages", [])
     user_text: str = body.get("user_text", "")
@@ -521,6 +546,16 @@ async def chat(request: Request):
     retrieved = retrieve(corpus, recent_text)
     retrieval_block = format_retrieved(retrieved)
     farewell = is_farewell(user_text)
+    log_event(
+        "chat_request",
+        request_id=request_id,
+        tier=CHAT_MODEL_TIER,
+        farewell=farewell,
+        buddhist_mode=buddhist_mode,
+        current_events_mode=current_events_mode,
+        message_count=len(messages),
+        user_len=len(user_text),
+    )
 
     farewell_instruction = ""
     if farewell:
@@ -567,19 +602,19 @@ async def chat(request: Request):
         groq_failed = False
         if groq_key:
             try:
-                async for delta in _stream_groq(groq_key, full_system, messages):
+                async for delta in _stream_groq(groq_key, full_system, messages, request_id=request_id):
                     yield delta
                 return
             except Exception as e:
                 groq_failed = True
-                print(f"[chat] groq failed -> fallback: {e}")
+                log_event("chat_model_failed", request_id=request_id, provider="groq", error_type=type(e).__name__, error=e)
         if go_key:
             try:
-                async for delta in _stream_go(go_key, full_system, messages):
+                async for delta in _stream_go(go_key, full_system, messages, request_id=request_id):
                     yield delta
                 return
             except Exception as e:
-                print(f"[chat] go api failed: {e}")
+                log_event("chat_model_failed", request_id=request_id, provider="opencode_go", error_type=type(e).__name__, error=e)
         if groq_failed or go_key:
             raise RuntimeError("all external chat fallbacks failed")
         raise RuntimeError("no fallback chat model key configured")
@@ -589,7 +624,7 @@ async def chat(request: Request):
         try:
             if farewell and anthropic_key:
                 try:
-                    print(f"[chat] farewell -> {BLESSING_MODEL}")
+                    log_event("chat_model_start", request_id=request_id, provider="anthropic", model=BLESSING_MODEL, route="farewell")
                     client = anthropic.Anthropic(api_key=anthropic_key)
                     with client.messages.stream(
                         model=BLESSING_MODEL,
@@ -601,13 +636,13 @@ async def chat(request: Request):
                             full_response += text
                             yield "data: " + json.dumps({"type": "token", "text": text}, ensure_ascii=False) + "\n\n"
                 except Exception as e:
-                    print(f"[chat] anthropic farewell failed -> fallback: {e}")
+                    log_event("chat_model_failed", request_id=request_id, provider="anthropic", model=BLESSING_MODEL, route="farewell", error_type=type(e).__name__, error=e)
                     async for delta in stream_fallback_model():
                         full_response += delta
                         yield "data: " + json.dumps({"type": "token", "text": delta}, ensure_ascii=False) + "\n\n"
 
             elif CHAT_MODEL_TIER == "premium" and anthropic_key:
-                print(f"[chat] premium -> {PREMIUM_MODEL}")
+                log_event("chat_model_start", request_id=request_id, provider="anthropic", model=PREMIUM_MODEL, route="premium")
                 client = anthropic.Anthropic(api_key=anthropic_key)
                 with client.messages.stream(
                     model=PREMIUM_MODEL,
@@ -625,7 +660,7 @@ async def chat(request: Request):
                     yield "data: " + json.dumps({"type": "token", "text": delta}, ensure_ascii=False) + "\n\n"
 
             elif go_key:
-                async for delta in _stream_go(go_key, full_system, messages):
+                async for delta in _stream_go(go_key, full_system, messages, request_id=request_id):
                     full_response += delta
                     yield "data: " + json.dumps({"type": "token", "text": delta}, ensure_ascii=False) + "\n\n"
 
@@ -643,13 +678,14 @@ async def chat(request: Request):
                         "book":  blessing.get("\u51fa\u8655", ""),
                     }, ensure_ascii=False) + "\n\n"
 
-            print(f"[chat] done, len={len(full_response)}")
+            log_event("chat_done", request_id=request_id, response_len=len(full_response), used_local_fallback=False)
             yield "data: " + json.dumps({"type": "done", "full": full_response}, ensure_ascii=False) + "\n\n"
 
         except Exception as e:
-            print(f"[chat] error: {e}")
+            log_event("chat_external_chain_failed", request_id=request_id, error_type=type(e).__name__, error=e)
             fallback_text = local_companion_fallback(user_text, farewell=farewell)
             full_response = (full_response + fallback_text) if full_response else fallback_text
+            log_event("chat_done", request_id=request_id, response_len=len(full_response), used_local_fallback=True)
             yield "data: " + json.dumps({"type": "token", "text": fallback_text}, ensure_ascii=False) + "\n\n"
             if farewell:
                 full_conv = " ".join(m["content"] for m in messages if m["role"] == "user")
