@@ -879,8 +879,8 @@ body.line-active .btn-info-mobile { opacity: 0.55; }
         一個深受人間佛教薰陶的在家陪伴者，在星雲大師智慧啟發下，用真誠、不評判的心陪伴每一個人。
       </div>
       <div class="info-section">
-        <strong><span class="info-icon">🎁</span> 善緣送您祁福禮</strong>
-        ✦ 不論你有什麼信仰，只要想說說話，善緣都在。<br>✦ 談話結束時，記得道別說<span style="white-space:nowrap;">「再見」</span>，善緣會根據對話，送上大師金言，為您祁福。<br>✦ 使用語音對話後，請按「結束對話」或關閉網頁，讓麥克風停止使用、節省電量。
+        <strong><span class="info-icon">🎁</span> 善緣送您祈福禮</strong>
+        ✦ 不論你有什麼信仰，只要想說說話，善緣都在。<br>✦ 想結束這次談話時，記得跟善緣道別，會送您祈福禮。領完禮物後，記得關閉頁面，節省電力資源。
       </div>
       <div class="info-section">
         <strong><span class="info-icon">📖</span> 精神糧食</strong>
@@ -2247,9 +2247,8 @@ function toggleVoice() {
     tip.innerHTML = `
       <div style="font-size:15px;font-weight:500;color:#3a3228;margin-bottom:12px;letter-spacing:0.05em;">🎙 語音對話說明</div>
       <div style="font-size:13px;color:#5a4a38;line-height:1.8;">
-        <div>1. 按一次麥克風，即可開始連續語音對話。</div>
-        <div>2. 說完稍停，善緣會自動回應；也歡迎文字形式交談。</div>
-        <div>3. 結束後請按「結束對話」或關閉網頁，以停止麥克風、節省電量。</div>
+        <div>1. 按一次麥克風，即可開始連續語音對話；說完稍停，善緣會自動回應，也歡迎文字形式交談。</div>
+        <div>2. 想結束這次談話時，記得跟善緣道別，會送您祈福禮。領完禮物後，記得關閉頁面，節省電力資源。</div>
       </div>
       <button onclick="this.parentNode.remove();startVoiceConvo();" style="margin-top:16px;width:100%;padding:9px;background:#7a6a50;color:#fff;border:none;border-radius:8px;font-size:13px;letter-spacing:0.1em;cursor:pointer;">了解，開始對話</button>
     `;
@@ -2257,6 +2256,26 @@ function toggleVoice() {
     return;
   }
   startVoiceConvo();
+}
+
+function truncateAtSentence(text, maxLen) {
+  if (!text || text.length <= maxLen) return text;
+  const clipped = text.slice(0, maxLen);
+  const lastStop = Math.max(
+    clipped.lastIndexOf('。'),
+    clipped.lastIndexOf('！'),
+    clipped.lastIndexOf('？'),
+    clipped.lastIndexOf('!'),
+    clipped.lastIndexOf('?')
+  );
+  if (lastStop >= 12) return clipped.slice(0, lastStop + 1);
+  const lastComma = Math.max(
+    clipped.lastIndexOf('，'),
+    clipped.lastIndexOf('；'),
+    clipped.lastIndexOf(';')
+  );
+  if (lastComma >= 12) return clipped.slice(0, lastComma) + '。';
+  return clipped + '。';
 }
 
 async function startVoiceConvo() {
@@ -2288,7 +2307,7 @@ async function startVoiceConvo() {
   if (ttsAvailable && !ttsMuted) {
     const firstMsg = document.querySelector('#chat-inner .msg.assistant span:not(.msg-label)');
     const fullGreeting = firstMsg ? firstMsg.textContent.trim() : '';
-    const greetingText = fullGreeting.length > 80 ? fullGreeting.slice(0, 80) + '。' : fullGreeting;
+    const greetingText = truncateAtSentence(fullGreeting, 80);
     if (greetingText) {
       setConvoStatus('善緣問候中…', false);
       try {

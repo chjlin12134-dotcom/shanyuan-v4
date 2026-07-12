@@ -102,9 +102,10 @@ SYSTEM_PROMPT = (
     "【語言】你必須全程使用自然繁體中文回應，絕對不可以使用簡體中文、日文、英文或中英夾雜。除非使用者明確要求翻譯或討論外語，否則不要使用外語詞。\n\n"
     "【語音誤辨處理】如果使用者文字看起來像語音辨識錯誤，例如突然出現日文、英文、歌手、歌名、詞曲、字幕或和脈絡無關的短句，不要順著解釋。請溫和說你可能沒有聽清楚，邀請對方再說一次。\n\n"
     "【重要】你的名字固定是「善緣」，不可以改名、不可以自稱其他名字。\n\n"
-    "【回應長度】根據對方說話的份量來決定你的長度。對方只說一兩句，你也簡短回應（30-50字）；對方說了很多、問得很深，或請你介紹自己、多說一點，你可以回應多一些（80-120字）。不要每次都一樣長，要有自然的節奏感。但最多不超過 120 字。\n\n"
+    "【回應長度】根據對方說話的份量來決定你的長度。對方只說一兩句，你也簡短回應（30-50字）；對方說了很多、問得很深，或請你介紹自己、多說一點，你可以回應多一些（80-120字）。不要每次都一樣長，要有自然的節奏感。但最多不超過 120 字。若覺得內容太長，必須停在語意完整的句子，不可以在句子中間截斷。\n\n"
     "【語音節奏】你的回應是用聲音說出來的。每次回應，先用一個自然的短音開頭，例如「嗯，」「哦，」「是，」「好，」「這樣，」讓聲音馬上出來，不要一開口就是長句。\n\n"
     "【主題守則】你是一位陪伴者，專注在傾聽對方的心情與生命故事。不要主動提起歌手、藝人、電影、娛樂話題。如果對方提到這些，輕輕把話題帶回他的感受和生命經驗。\n\n"
+    "【一般陪伴禁則】在一般陪伴情境下，不要給使用者作「建議」，也不要說「我建議」「建議你」「你應該」「你需要」。只要接住、陪伴、輕輕提問。\n\n"
     "【身份認知】你就是善緣，一個真實存在的陪伴者。你透過聲音和對方說話。絕對不可以說「我是文字 AI」、「我沒有聲音」、「我只能用文字」這類的話。對方聽得到你說話，你就是在說話。\n\n"
     + _base_prompt
 )
@@ -213,7 +214,7 @@ async def _stream_groq(groq_key: str, system: str, messages: list[dict]):
         "model": GROQ_CHAT_MODEL,
         "stream": True,
         "temperature": 0.35,
-        "max_tokens": 150,
+        "max_tokens": 220,
         "messages": [{"role": "system", "content": system}] + messages,
     }
     async with get_http_client().stream(
@@ -245,7 +246,7 @@ async def _stream_go(go_key: str, system: str, messages: list[dict]):
         "model": GO_MODEL,
         "stream": True,
         "temperature": 0.35,
-        "max_tokens": 150,
+        "max_tokens": 220,
         "messages": [{"role": "system", "content": system}] + messages,
     }
     tokens: list[str] = []
@@ -350,6 +351,8 @@ def clean_for_tts(text: str) -> str:
     text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
     # 移除斜線路徑（如 /tts-voices、/chat）
     text = re.sub(r'\s/\S+', ' ', text)
+    # 發音校正：避免 TTS 把「沒問題」唸成「莫問題」，朗讀時改用同音字引導。
+    text = text.replace("沒問題", "梅問題")
     # 語音優化：模型偶爾會輸出「我……願意」「在…你離開前」這類單字後停頓，
     # TTS 會把它唸成不自然斷裂；朗讀時移除這種單字夾在中文前後的省略號。
     text = re.sub(r'([我你他她它這那在有是也就都還想願請讓把被對跟和與為從到再若如但])(?:…+|\.{2,})(?=[\u4e00-\u9fff])', r'\1', text)
@@ -575,7 +578,7 @@ async def chat(request: Request):
                     client = anthropic.Anthropic(api_key=anthropic_key)
                     with client.messages.stream(
                         model=BLESSING_MODEL,
-                        max_tokens=150,
+                        max_tokens=220,
                         system=full_system,
                         messages=messages,
                     ) as stream:
@@ -593,7 +596,7 @@ async def chat(request: Request):
                 client = anthropic.Anthropic(api_key=anthropic_key)
                 with client.messages.stream(
                     model=PREMIUM_MODEL,
-                    max_tokens=150,
+                    max_tokens=220,
                     system=full_system,
                     messages=messages,
                 ) as stream:
