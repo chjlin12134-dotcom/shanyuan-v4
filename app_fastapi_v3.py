@@ -294,9 +294,14 @@ def local_companion_fallback(user_text: str, farewell: bool = False) -> str:
     """Last-resort reply when external chat models are unavailable."""
     if farewell:
         return "再見。在你離開前，我為你準備了一句大師的話，讓你帶著走。請點祈福禮。"
-    if (user_text or "").strip():
-        return "嗯，我聽到了。\n\n剛才連線有一點不穩，但我們不用急。\n\n你可以把剛才那句話再說一次，我會接著陪你。"
-    return "嗯，我在。\n\n剛才連線有一點不穩。\n\n你可以再說一次，我會接著聽。"
+    compact = re.sub(r"[\s，。！？!?、,.]+", "", user_text or "")
+    if compact in {"好", "好的", "可以", "嗯", "恩", "對", "是", "沒錯", "ok", "OK"}:
+        return "好，我在。\n\n我們先不急。\n\n你想從剛才哪一句接著說？"
+    if re.search(r"斷|中斷|連線|上面|剛才|記得", user_text or ""):
+        return "嗯，我知道你在接剛才那段。\n\n中間有一點沒接穩。\n\n你可以從最想接續的那一句再說，我會陪你接下去。"
+    if compact:
+        return "嗯，我聽到了。\n\n這一輪沒有接得很穩。\n\n你可以換一句短一點的話再說，我會接著陪你。"
+    return "嗯，我在。\n\n這一輪沒有接得很穩。\n\n你可以再說一次，我會接著聽。"
 
 
 app = FastAPI()
