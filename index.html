@@ -1972,28 +1972,42 @@ function addBlessing(quote, title, book) {
     inner.appendChild(div);
     scrollToBottom();
     if (voiceConvoActive) stopVoiceConvo();
-    autoCloseAppAfterBlessing();
+    showFarewellClosePrompt();
   }, { once: true });
 }
 
-function autoCloseAppAfterBlessing() {
-  showToast('祈福禮已送達，APP 將自動關閉。');
+function showFarewellClosePrompt() {
+  showToast('祈福禮已送達，可以慢慢讀。');
   setTimeout(() => {
-    try {
-      window.open('', '_self');
-      window.close();
-    } catch(e) {}
-    setTimeout(() => {
-      document.body.innerHTML = `
-        <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f4efe7;color:#5a4a38;font-family:inherit;text-align:center;padding:24px;">
-          <div>
-            <div style="font-size:24px;margin-bottom:12px;">期待下次見</div>
-            <div style="font-size:15px;line-height:1.8;">祈福禮已送達。若頁面沒有自動關閉，您可以直接關閉此頁。</div>
-          </div>
-        </div>
-      `;
-    }, 600);
-  }, 2500);
+    const inner = getChatInner();
+    if (document.getElementById('farewell-close-prompt')) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'farewell-close-prompt';
+    wrap.className = 'blessing-btn-wrap';
+    wrap.innerHTML = `
+      <div style="font-size:16px;color:#5a4a38;margin-bottom:12px;">期待下次再見</div>
+      <button class="btn-open-blessing" onclick="closeFarewellPage()">
+        <span class="gift-label">關閉</span>
+      </button>
+    `;
+    inner.appendChild(wrap);
+    scrollToBottom();
+  }, 18000);
+}
+
+function closeFarewellPage() {
+  try {
+    window.open('', '_self');
+    window.close();
+  } catch(e) {}
+  document.body.innerHTML = `
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f4efe7;color:#5a4a38;font-family:inherit;text-align:center;padding:24px;">
+      <div>
+        <div style="font-size:24px;margin-bottom:12px;">期待下次再見</div>
+        <div style="font-size:15px;line-height:1.8;">您可以直接關閉此頁。</div>
+      </div>
+    </div>
+  `;
 }
 
 function scrollToBottom() {
