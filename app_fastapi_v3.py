@@ -269,6 +269,15 @@ async def _stream_go(go_key: str, system: str, messages: list[dict]):
                     continue
 
 
+def local_companion_fallback(user_text: str, farewell: bool = False) -> str:
+    """Last-resort reply when external chat models are unavailable."""
+    if farewell:
+        return "再見。在你離開前，我為你準備了一句大師的話，讓你帶著走。請點祈福禮。"
+    if (user_text or "").strip():
+        return "嗯，我聽到了。\n\n剛才連線有一點不穩，但我們不用急。\n\n你可以把剛才那句話再說一次，我會接著陪你。"
+    return "嗯，我在。\n\n剛才連線有一點不穩。\n\n你可以再說一次，我會接著聽。"
+
+
 app = FastAPI()
 public_dir = BASE_DIR / "public"
 public_dir.mkdir(exist_ok=True)
@@ -555,18 +564,24 @@ async def chat(request: Request):
     go_key        = os.environ.get("OPENCODE_GO_API_KEY", "")
 
     async def stream_fallback_model():
+        groq_failed = False
         if groq_key:
             try:
                 async for delta in _stream_groq(groq_key, full_system, messages):
                     yield delta
                 return
-            except RuntimeError:
-                if not go_key:
-                    raise
+            except Exception as e:
+                groq_failed = True
+                print(f"[chat] groq failed -> fallback: {e}")
         if go_key:
-            async for delta in _stream_go(go_key, full_system, messages):
-                yield delta
-            return
+            try:
+                async for delta in _stream_go(go_key, full_system, messages):
+                    yield delta
+                return
+            except Exception as e:
+                print(f"[chat] go api failed: {e}")
+        if groq_failed or go_key:
+            raise RuntimeError("all external chat fallbacks failed")
         raise RuntimeError("no fallback chat model key configured")
 
     async def generate():
@@ -633,6 +648,19 @@ async def chat(request: Request):
 
         except Exception as e:
             print(f"[chat] error: {e}")
-            yield "data: " + json.dumps({"type": "error", "message": "連線暫時不穩，請再試一次。"}, ensure_ascii=False) + "\n\n"
+            fallback_text = local_companion_fallback(user_text, farewell=farewell)
+            full_response = (full_response + fallback_text) if full_response else fallback_text
+            yield "data: " + json.dumps({"type": "token", "text": fallback_text}, ensure_ascii=False) + "\n\n"
+            if farewell:
+                full_conv = " ".join(m["content"] for m in messages if m["role"] == "user")
+                blessing = get_blessing(corpus, full_conv)
+                if blessing:
+                    yield "data: " + json.dumps({
+                        "type": "blessing",
+                        "quote": blessing.get("\u5927\u5e2b\u91d1\u53e5", ""),
+                        "title": blessing.get("\u6a19\u984c", ""),
+                        "book":  blessing.get("\u51fa\u8655", ""),
+                    }, ensure_ascii=False) + "\n\n"
+            yield "data: " + json.dumps({"type": "done", "full": full_response}, ensure_ascii=False) + "\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")

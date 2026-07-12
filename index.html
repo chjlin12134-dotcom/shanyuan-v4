@@ -880,7 +880,7 @@ body.line-active .btn-info-mobile { opacity: 0.55; }
       </div>
       <div class="info-section">
         <strong><span class="info-icon">🎁</span> 善緣送您祈福禮</strong>
-        ✦ 不論你有什麼信仰，只要想說說話，善緣都在。<br>✦ 想結束這次談話時，記得跟善緣道別，會送您祈福禮。領完禮物後，記得關閉頁面，節省電力資源。
+        ✦ 不論你有什麼信仰，只要想說說話，善緣都在。<br>✦ 結束談話說再見道別，領取善緣會送您的祈福禮，接著 APP 會自動關閉。
       </div>
       <div class="info-section">
         <strong><span class="info-icon">📖</span> 精神糧食</strong>
@@ -1976,7 +1976,28 @@ function addBlessing(quote, title, book) {
     inner.appendChild(div);
     scrollToBottom();
     if (voiceConvoActive) stopVoiceConvo();
+    autoCloseAppAfterBlessing();
   }, { once: true });
+}
+
+function autoCloseAppAfterBlessing() {
+  showToast('祈福禮已送達，APP 將自動關閉。');
+  setTimeout(() => {
+    try {
+      window.open('', '_self');
+      window.close();
+    } catch(e) {}
+    setTimeout(() => {
+      document.body.innerHTML = `
+        <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f4efe7;color:#5a4a38;font-family:inherit;text-align:center;padding:24px;">
+          <div>
+            <div style="font-size:22px;margin-bottom:12px;">祈福禮已送達</div>
+            <div style="font-size:15px;line-height:1.8;">這次談話已結束。若頁面沒有自動關閉，您可以直接關閉此頁。</div>
+          </div>
+        </div>
+      `;
+    }, 600);
+  }, 2500);
 }
 
 function scrollToBottom() {
@@ -2247,8 +2268,9 @@ function toggleVoice() {
     tip.innerHTML = `
       <div style="font-size:15px;font-weight:500;color:#3a3228;margin-bottom:12px;letter-spacing:0.05em;">🎙 語音對話說明</div>
       <div style="font-size:13px;color:#5a4a38;line-height:1.8;">
-        <div>1. 按一次麥克風，即可開始連續語音對話；說完稍停，善緣會自動回應，也歡迎文字形式交談。</div>
-        <div>2. 想結束這次談話時，記得跟善緣道別，會送您祈福禮。領完禮物後，記得關閉頁面，節省電力資源。</div>
+        <div>1. 按一次麥克風，即可開始連續語音對話。</div>
+        <div>2. 說完稍停，善緣會自動回應；也歡迎文字形式交談。</div>
+        <div>3. 結束談話說再見道別，領取善緣會送您的祈福禮，接著 APP 會自動關閉。</div>
       </div>
       <button onclick="this.parentNode.remove();startVoiceConvo();" style="margin-top:16px;width:100%;padding:9px;background:#7a6a50;color:#fff;border:none;border-radius:8px;font-size:13px;letter-spacing:0.1em;cursor:pointer;">了解，開始對話</button>
     `;
