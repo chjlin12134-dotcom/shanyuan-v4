@@ -1236,11 +1236,11 @@ class MobileVoiceEngine {
       } else {
         speechFrames = 0;
         if (!this._silenceTimeout && this.hasSpeech) {
-          console.log('[MVE2] 靜音開始，等 1300ms');
+          console.log('[MVE2] 靜音開始，等 2400ms');
           this._silenceTimeout = setTimeout(() => {
             this._silenceTimeout = null;
             if (this.isRecording) this._stopAndFire();
-          }, 1300);
+          }, 2400);
         }
       }
     }, 50);
@@ -1284,7 +1284,7 @@ let pendingBuddhistQuestion = '';
 
 // 明確道別詞：絕對不會誤觸，直接送後端觸發道別（不確認）
 const HARD_FAREWELL_WORDS = [
-  '再見', '拜拜', '掰掰', 'bye', 'goodbye', '結束對話', '結束',
+  '再見', '拜拜', '掰掰', 'bye', 'goodbye', '結束對話',
 ];
 
 // 軟道別詞：可能誤觸，先問「你想暫時先休息嗎？」確認後才送道別
@@ -1295,7 +1295,7 @@ const SOFT_FAREWELL_WORDS = [
   '先這樣了', '就先這樣', '先這樣好了',
   '回去了', '要去了', '告辭',
   '辛苦你了', '下次見', '有空再聊',
-  '暫時到這', '暫時結束', '暫停一下', '先停在這',
+  '暫時到這', '暫時結束', '先停在這',
   '先到這裡', '先到這邊', '就到這邊', '就到這裡',
   '下次再聊', '改天再聊', '今天先這樣',
   '要掛了', '先掛了', '我要走了', '我先走了',
@@ -1306,10 +1306,16 @@ const SOFT_FAREWELL_WORDS = [
 
 function detectFarewellType(text) {
   const t = text.trim();
+  const compact = t.replace(/[\s，。！？!?、,.]+/g, '');
   // 軟道別先檢查（避免「就先說到這裡再見」被 hard 攔截）
-  if (SOFT_FAREWELL_WORDS.some(w => t.includes(w))) return 'soft';
-  if (HARD_FAREWELL_WORDS.some(w => t.toLowerCase().includes(w))) return 'hard';
+  if (SOFT_FAREWELL_WORDS.some(w => compact.endsWith(w))) return 'soft';
+  if (HARD_FAREWELL_WORDS.some(w => compact === w || compact.endsWith(w))) return 'hard';
   return null;
+}
+
+function isFarewellConfirmYes(text) {
+  const compact = text.trim().replace(/[\s，。！？!?、,.]+/g, '').toLowerCase();
+  return /^(是的|對|沒錯|確定|要結束|想結束|我要結束|可以結束|先休息|想休息|我要休息|再見|拜拜|掰掰|bye|ok結束|yes結束)$/.test(compact);
 }
 
 const BUDDHIST_CONFIRM_TEXT = '嗯，你提到的是佛法裡的語言。\n\n我平常不會主動把話帶到佛教裡，因為來聊天的人不一定是佛教徒，也不一定想用佛法來理解自己的事。\n\n但如果你願意，我可以陪你從佛法、人間佛教，或星雲大師的角度慢慢談。\n\n你想往這個方向聊嗎？';
@@ -1952,17 +1958,7 @@ function addBlessing(quote, title, book) {
   inner.appendChild(btnWrap);
   scrollToBottom();
 
-  // 10 秒無反應 → 提示結束
-  const autoEndTimer = setTimeout(() => {
-    if (document.body.contains(btnWrap)) {
-      btnWrap.remove();
-      showToast('對話已結束，感謝您與善緣分享。');
-      if (voiceConvoActive) stopVoiceConvo();
-    }
-  }, 10000);
-
   btn.addEventListener('click', () => {
-    clearTimeout(autoEndTimer);
     btnWrap.remove();
     const div = document.createElement('div');
     div.className = 'blessing';
@@ -1991,8 +1987,8 @@ function autoCloseAppAfterBlessing() {
       document.body.innerHTML = `
         <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f4efe7;color:#5a4a38;font-family:inherit;text-align:center;padding:24px;">
           <div>
-            <div style="font-size:22px;margin-bottom:12px;">祈福禮已送達</div>
-            <div style="font-size:15px;line-height:1.8;">這次談話已結束。若頁面沒有自動關閉，您可以直接關閉此頁。</div>
+            <div style="font-size:24px;margin-bottom:12px;">期待下次見</div>
+            <div style="font-size:15px;line-height:1.8;">祈福禮已送達。若頁面沒有自動關閉，您可以直接關閉此頁。</div>
           </div>
         </div>
       `;
@@ -2474,7 +2470,7 @@ async function startRecording() {
     analyser.fftSize = 512;
     source.connect(analyser);
     const timeBuf = new Float32Array(analyser.fftSize);
-    const SILENCE_MS = 1500;
+    const SILENCE_MS = 2600;
     hasSpeech = false;
     let noiseFloor = 0;
     let noiseFrames = 0;
@@ -2600,12 +2596,17 @@ async function handleRecordingDone(mimeType, mveBlob) {
 
       if (awaitingFarewellConfirm) {
         awaitingFarewellConfirm = false;
-        const yes = /是|對|好|嗯|可以|沒錯|確定|要|行|ok|yes/i.test(data.transcript);
+        const yes = isFarewellConfirmYes(data.transcript);
         removeTyping();
         if (yes) {
           if (voiceConvoActive) setConvoStatus('善緣回應中…', false);
           await sendMessage('再見', true);
         } else {
+          const keepTalkingText = '沒關係，我先不結束。你還想再多談點什麼？';
+          addMessage('assistant', keepTalkingText);
+          if (ttsAvailable && !ttsMuted) {
+            await speakAssistantNotice(keepTalkingText, '善緣問您…');
+          }
           if (voiceConvoActive) { setConvoStatus('聆聽中…', true); await startRecording(); }
         }
         if (voiceStopRequested) return;
