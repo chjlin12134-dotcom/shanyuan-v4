@@ -1949,7 +1949,7 @@ function closeInfo() {
 }
 
 function normalizeAssistantDisplayText(text) {
-  return (text || '').replace(/([我你他她它這那在有是也就都還想願請讓把被對跟和與為從到再若如但])\s*(?:…+|\.{2,}|⋯+)\s*(?=[\u4e00-\u9fff])/g, '$1');
+  return (text || '').replace(/([我你他她它這那在有是也就都還想願請讓把被對跟和與為從到再若如但])\s*(?:…+|\.{2,}|⋯+)\s*[，,、。．.：:；;！!？?]?\s*(?=[\u4e00-\u9fff])/g, '$1');
 }
 
 function getChatInner() { return document.getElementById('chat-inner'); }

@@ -387,24 +387,29 @@ def clean_for_tts(text: str) -> str:
     text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
     # 移除斜線路徑（如 /tts-voices、/chat）
     text = re.sub(r'\s/\S+', ' ', text)
-    # 發音校正：避免 TTS 把「沒問題」唸成「莫問題」，朗讀時改用同音字引導。
+    # 發音校正：朗讀專用，不影響畫面文字。用同音字引導 TTS，逐步擴充成詞彙表。
     replacements = {
         "沒問題": "梅問題",
-        # 食物「乾」作名詞/後綴時常被 TTS 誤讀；朗讀用「干」引導，畫面文字不受影響。
-        "葡萄乾": "葡萄干",
-        "芒果乾": "芒果干",
-        "水果乾": "水果干",
-        "果乾": "果干",
-        "豆乾": "豆干",
-        "肉乾": "肉干",
-        "菜乾": "菜干",
     }
     for src, dst in replacements.items():
         text = text.replace(src, dst)
+
+    # 多數日常「乾」讀 gan（葡萄乾、蘿蔔乾、乾淨、口乾、乾杯）。
+    # Edge TTS 有時會誤讀成 qian；朗讀時先轉「干」。少數確實讀 qian 的詞先保護。
+    qian_protected = {
+        "乾隆": "__QIAN_LONG__",
+        "乾坤": "__QIAN_KUN__",
+        "乾卦": "__QIAN_GUA__",
+    }
+    for src, token in qian_protected.items():
+        text = text.replace(src, token)
+    text = text.replace("乾", "干")
+    for src, token in qian_protected.items():
+        text = text.replace(token, src)
     # 語音優化：模型偶爾會輸出「我……願意」「在…你離開前」這類單字後停頓，
     # TTS 會把它唸成不自然斷裂；朗讀時移除這種單字夾在中文前後的省略號。
     text = re.sub(
-        r'([我你他她它這那在有是也就都還想願請讓把被對跟和與為從到再若如但])\s*(?:…+|\.{2,}|⋯+)\s*(?=[\u4e00-\u9fff])',
+        r'([我你他她它這那在有是也就都還想願請讓把被對跟和與為從到再若如但])\s*(?:…+|\.{2,}|⋯+)\s*[，,、。．.：:；;！!？?]?\s*(?=[\u4e00-\u9fff])',
         r'\1',
         text,
     )
