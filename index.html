@@ -393,6 +393,59 @@ header {
 }
 .btn-open-blessing:hover .gift-icon { filter: drop-shadow(0 6px 16px rgba(180,120,40,0.5)); }
 
+.farewell-close-card {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 22px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255,255,255,0.82), rgba(248,242,232,0.94)),
+    linear-gradient(135deg, rgba(226,214,190,0.52), rgba(232,220,226,0.42));
+  border: 1px solid rgba(170,145,105,0.34);
+  box-shadow: 0 10px 26px rgba(90,70,45,0.12);
+}
+.farewell-close-title {
+  font-size: 16px;
+  color: #5a4a38;
+  letter-spacing: 0.12em;
+}
+.farewell-close-note {
+  font-size: 12px;
+  color: #8a765e;
+  letter-spacing: 0.06em;
+}
+.btn-farewell-close {
+  min-width: 128px;
+  padding: 11px 28px;
+  border: 1px solid rgba(125,95,58,0.34);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255,252,246,0.98), rgba(236,224,205,0.94));
+  color: #6a5030;
+  font-family: 'Noto Serif TC', serif;
+  font-size: 14px;
+  letter-spacing: 0.24em;
+  cursor: pointer;
+  box-shadow: 0 7px 18px rgba(120,90,50,0.14), inset 0 1px 0 rgba(255,255,255,0.85);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.btn-farewell-close::before {
+  content: "✦";
+  margin-right: 0.45em;
+  color: rgba(160,120,70,0.72);
+  letter-spacing: 0;
+}
+.btn-farewell-close:hover {
+  transform: translateY(-1px);
+  border-color: rgba(125,95,58,0.5);
+  box-shadow: 0 10px 24px rgba(120,90,50,0.18), inset 0 1px 0 rgba(255,255,255,0.9);
+}
+.btn-farewell-close:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 12px rgba(120,90,50,0.12), inset 0 1px 2px rgba(100,70,40,0.08);
+}
+
 .blessing {
   align-self: center; width: 92%;
   background: linear-gradient(160deg, rgba(252,248,238,0.97) 0%, rgba(244,236,220,0.95) 100%);
@@ -1895,6 +1948,10 @@ function closeInfo() {
   if (btnM) btnM.innerHTML = '<span class="gift-emoji">🎁</span> 善緣有禮 ▾';
 }
 
+function normalizeAssistantDisplayText(text) {
+  return (text || '').replace(/([我你他她它這那在有是也就都還想願請讓把被對跟和與為從到再若如但])\s*(?:…+|\.{2,}|⋯+)\s*(?=[\u4e00-\u9fff])/g, '$1');
+}
+
 function getChatInner() { return document.getElementById('chat-inner'); }
 
 function addMessage(role, text) {
@@ -1909,7 +1966,7 @@ function addMessage(role, text) {
   }
   const content = document.createElement('span');
   content.className = 'msg-content';
-  content.textContent = text;
+  content.textContent = role === 'assistant' ? normalizeAssistantDisplayText(text) : text;
   div.appendChild(content);
 
   if (role === 'assistant' && ttsAvailable) {
@@ -1985,17 +2042,42 @@ function showFarewellClosePrompt() {
     wrap.id = 'farewell-close-prompt';
     wrap.className = 'blessing-btn-wrap';
     wrap.innerHTML = `
-      <div style="font-size:16px;color:#5a4a38;margin-bottom:12px;">期待下次再見</div>
-      <button class="btn-open-blessing" onclick="closeFarewellPage()">
-        <span class="gift-label">關閉</span>
-      </button>
+      <div class="farewell-close-card">
+        <div class="farewell-close-title">期待下次再見</div>
+        <button class="btn-farewell-close" onclick="closeFarewellPage()">關閉</button>
+        <div class="farewell-close-note"><span id="farewell-auto-close-seconds">30</span> 秒後自動關閉</div>
+      </div>
     `;
     inner.appendChild(wrap);
     scrollToBottom();
+    startFarewellAutoClose();
   }, 18000);
 }
 
+let farewellAutoCloseTimer = null;
+let farewellAutoCloseTick = null;
+
+function startFarewellAutoClose() {
+  clearTimeout(farewellAutoCloseTimer);
+  clearInterval(farewellAutoCloseTick);
+  let seconds = 30;
+  const secEl = document.getElementById('farewell-auto-close-seconds');
+  if (secEl) secEl.textContent = String(seconds);
+  farewellAutoCloseTick = setInterval(() => {
+    seconds -= 1;
+    const el = document.getElementById('farewell-auto-close-seconds');
+    if (el) el.textContent = String(Math.max(seconds, 0));
+    if (seconds <= 0) clearInterval(farewellAutoCloseTick);
+  }, 1000);
+  farewellAutoCloseTimer = setTimeout(() => {
+    clearInterval(farewellAutoCloseTick);
+    closeFarewellPage();
+  }, 30000);
+}
+
 function closeFarewellPage() {
+  clearTimeout(farewellAutoCloseTimer);
+  clearInterval(farewellAutoCloseTick);
   try {
     window.open('', '_self');
     window.close();
@@ -2181,7 +2263,7 @@ async function sendMessage(userText, skipTyping = false, opts = {}) {
             // C3：語音模式改為在 TTS 開始播放時才移除三點，此處只記 flag
             if (isVoice && !firstTokenReceived) { firstTokenReceived = true; }
             fullText += data.text;
-            if (contentSpan) { contentSpan.textContent = fullText; scrollToBottom(); }
+            if (contentSpan) { contentSpan.textContent = normalizeAssistantDisplayText(fullText); scrollToBottom(); }
             if (isVoice && ttsAvailable && !ttsMuted) {
               ttsBuffer += data.text;
               // C2：手機與電腦統一用句號觸發，消除兩段 TTS 中間的斷字停頓
