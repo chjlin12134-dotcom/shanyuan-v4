@@ -4,6 +4,28 @@
 
 本資料夾是善緣 V4 的 Cloud Run / GitHub 部署 repo。
 
+## 開工前硬性規則
+
+處理本 repo 前，尤其涉及部署、GitHub、Cloud Run、Hugging Face、API key、語音 / STT / TTS 核心流程，必須先讀：
+
+1. `..\shanyuan update\SKILL_語音-更新版.md`
+2. 本檔 `V4_NOTES.md`
+3. 最新的 `..\收工備忘*.md`
+
+不可只靠記憶或聊天上下文操作。
+
+若未先讀上述文件，不得執行部署、推送、登入、改環境變數、修改 Cloud Run 設定。
+
+已知部署坑：
+
+- 本機 GitHub CLI token 曾失效。
+- Windows `git-remote-https.exe` / HTTPS Git 曾崩潰。
+- 不要優先走本機 `git push` 或反覆 GitHub device login。
+- 優先使用 Codex GitHub 連接器 / 低階提交，或走既有 Cloud Build / Cloud Run 路線。
+- 本 repo 部署分支是 `master`，不是 `main`。
+- push 後 Cloud Run 不是即時完成；線上仍舊版時，先查 Cloud Build 是否仍在 running。
+- 涉及 key 時，不讀、不複製、不回顯；由使用者在 Cloud Run Console 自行填。
+
 - 本機路徑：`C:\Users\June\AI_project\shanyuan_fulltext_claude v1\shanyuan-v4-repo`
 - GitHub repo：`chjlin12134-dotcom/shanyuan-v4`
 - branch：`master`

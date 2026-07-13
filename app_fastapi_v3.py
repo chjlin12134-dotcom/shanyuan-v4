@@ -442,9 +442,9 @@ async def tts(request: Request):
             voices_to_try.append(FALLBACK_VOICE)
         for attempt_voice in voices_to_try:
             try:
-                # 開頭用不可唸出的零寬字元墊一下，避免 edge-tts 吃掉第一個字；
-                # 不再使用「、」這類可聽見標點，避免「我...願意」式的開頭斷裂。
-                padded_text = f"\u200b{text}"
+                # 不在開頭加零寬字元或標點。零寬字元在部分 Edge TTS 聲線會造成
+                # 「你...」「在...」這類第一字後不自然斷裂。
+                padded_text = text
                 communicate = edge_tts.Communicate(
                     text=padded_text,
                     voice=attempt_voice,
