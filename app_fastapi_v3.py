@@ -165,13 +165,28 @@ def format_retrieved(items: list[dict]) -> str:
 def is_farewell(text: str) -> bool:
     return any(w in text.lower() for w in FAREWELL_WORDS)
 
+BLESSING_BLACKLIST = [
+    "沒有做什麼好事", "慳貪", "瞋恨", "愚痴", "愚癡", "邪見",
+    "不給感應", "不知道你", "不認識你", "沒有廣結善緣",
+    "不曾想要造福", "沒有廣結", "怕近處的菩薩",
+]
+
 def get_blessing(corpus: pd.DataFrame, conversation_text: str) -> dict | None:
     if corpus.empty:
         return None
-    items = retrieve(corpus, conversation_text, k=1)
-    if not items:
-        return corpus.sample(1).iloc[0].to_dict()
-    return items[0]
+    items = retrieve(corpus, conversation_text, k=5)
+    for item in items:
+        combined = f"{item.get('大師金句','')}{item.get('善緣陪伴語','')}{item.get('具體故事','')}"
+        if not any(w in combined for w in BLESSING_BLACKLIST):
+            return item
+    for _ in range(30):
+        candidate = corpus.sample(1).iloc[0]
+        combined = f"{candidate.get('大師金句','')}{candidate.get('善緣陪伴語','')}{candidate.get('具體故事','')}"
+        if not any(w in combined for w in BLESSING_BLACKLIST):
+            return candidate.to_dict()
+    if items:
+        return items[0]
+    return corpus.sample(1).iloc[0].to_dict()
 
 
 async def _stream_groq(groq_key: str, system: str, messages: list[dict]):
@@ -345,11 +360,17 @@ async def tts(request: Request):
             voices_to_try.append(FALLBACK_VOICE)
         for attempt_voice in voices_to_try:
             try:
-                # 開頭墊字避免 edge-tts 吃掉第一個字的發音；
-                # 原本用「，」會被唸成明顯停頓，聽起來像「噎」到，改用停頓更短的「、」
-                padded_text = f"、{text}"
+                # 包裝 SSML 修正發音：輕聲、破音
+                ssml_text = text
+                ssml_text = ssml_text.replace(
+                    "什麼", '<phoneme alphabet="pinyin" ph="shénme">什麼</phoneme>'
+                )
+                ssml_text = ssml_text.replace(
+                    "怎麼", '<phoneme alphabet="pinyin" ph="zěnme">怎麼</phoneme>'
+                )
+                # 句首不加墊字，避免不自然停頓（如「、你好」→「你好」）
                 communicate = edge_tts.Communicate(
-                    text=padded_text,
+                    text=f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="zh-TW">{ssml_text}</speak>',
                     voice=attempt_voice,
                     rate=voice_cfg["rate"],
                     pitch=voice_cfg["pitch"],

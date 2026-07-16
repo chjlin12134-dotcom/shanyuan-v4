@@ -29,6 +29,32 @@
    - 部署後可用 cron-job.org 或同類服務每 10-15 分鐘 ping：
      `https://<v4-space-url>/healthz`
 
+## 2026-07-16 Cloud Run 環境變數事故
+
+### 調查結論
+
+`ANTHROPIC_API_KEY` 和 `OPENCODE_GO_API_KEY` **從未被部署到 Cloud Run 上**。
+查證 10 個歷史 revision（00015 ~ 00024），全部都只有 `GROQ_API_KEY` + `GROQ_STT_API_KEY`。
+
+### 時間線
+
+| Revision | 時間 (UTC+8) | 部署者 | 說明 |
+|---|---|---|---|
+| 00015~00022 | 7/12-7/13 | service account | 自動部署（Cloud Build），只有 Groq keys |
+| 00023 | 7/16 10:04 | service account | git push → Cloud Build 自動觸發，只有 Groq keys |
+| 00024 | 7/16 10:13 | chjlin1213@gmail.com | OpenCode `gcloud run deploy --source`，**未覆蓋任何 key** |
+| 00025 | 7/16 10:48 | chjlin1213@gmail.com | 手動補上 OPENCODE_GO_API_KEY / ANTHROPIC_API_KEY（格式有誤待修） |
+
+### 關鍵發現
+
+1. OpenCode 的 `gcloud run deploy --source` **沒有覆蓋 Cloud Run 環境變數**（00023 和 00024 的 Groq keys 完全一致）
+2. `GROQ_API_KEY` 在 7/13 的 Cloud Build 自動部署中被更換（00015 → 00022），此與 OpenCode 無關
+3. 道別祈福之前能執行，最可能是**在本機測試**（本機 `.env` 有完整 keys），而非 Cloud Run
+
+### 待修
+
+- rev 00025 的 `OPENCODE_GO_API_KEY` 和 `ANTHROPIC_API_KEY` 設定值黏在一起（格式錯誤），需重新分開設定
+
 ## 尚未做
 
 - 尚未部署到 HuggingFace。
