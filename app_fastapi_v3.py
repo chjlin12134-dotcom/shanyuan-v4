@@ -333,8 +333,6 @@ def clean_for_tts(text: str) -> str:
     text = re.sub(r'\s/\S+', ' ', text)
     # 移除多餘空白
     text = re.sub(r'\s+', ' ', text).strip()
-    # edge-tts 句號停頓過長，轉短停頓，結尾不留贅字
-    text = text.replace('\u3002', '\uff0c').rstrip('\uff0c')
     return text
 
 @app.post("/tts")
