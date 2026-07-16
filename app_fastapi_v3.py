@@ -360,17 +360,8 @@ async def tts(request: Request):
             voices_to_try.append(FALLBACK_VOICE)
         for attempt_voice in voices_to_try:
             try:
-                # 包裝 SSML 修正發音：輕聲、破音
-                ssml_text = text
-                ssml_text = ssml_text.replace(
-                    "什麼", '<phoneme alphabet="pinyin" ph="shénme">什麼</phoneme>'
-                )
-                ssml_text = ssml_text.replace(
-                    "怎麼", '<phoneme alphabet="pinyin" ph="zěnme">怎麼</phoneme>'
-                )
-                # 句首不加墊字，避免不自然停頓（如「、你好」→「你好」）
                 communicate = edge_tts.Communicate(
-                    text=f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="zh-TW">{ssml_text}</speak>',
+                    text=text,
                     voice=attempt_voice,
                     rate=voice_cfg["rate"],
                     pitch=voice_cfg["pitch"],
