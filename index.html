@@ -910,6 +910,12 @@ body.line-active .btn-info-mobile { opacity: 0.55; }
 <div class="toast" id="toast"></div>
 
 <script>
+var ignoreSpeechUntil = 0;
+
+function armPostTtsInputCooldown(ms = 1500) {
+  ignoreSpeechUntil = Math.max(ignoreSpeechUntil, performance.now() + ms);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // MobileVoiceEngine v2 — 改用全局 mic stream + 每輪新建 MediaRecorder
 // 核心改變：
@@ -1157,6 +1163,15 @@ class MobileVoiceEngine {
       for (let i = 0; i < timeBuf.length; i++) sum += timeBuf[i] * timeBuf[i];
       const rms = Math.sqrt(sum / timeBuf.length);
 
+      if (performance.now() < ignoreSpeechUntil) {
+        speechFrames = 0;
+        if (this._silenceTimeout) { clearTimeout(this._silenceTimeout); this._silenceTimeout = null; }
+        if (noiseFrames >= 6 && rms < Math.max(noiseFloor * 2.5, 0.03)) {
+          noiseFloor = noiseFloor * 0.9 + rms * 0.1;
+        }
+        return;
+      }
+
       if (noiseFrames < 6) {
         noiseFloor = (noiseFloor * noiseFrames + rms) / (noiseFrames + 1);
         noiseFrames++; return;
@@ -1339,6 +1354,7 @@ async function speakAssistantNotice(text, statusText = '善緣說話中…') {
     ttsPlaybackDone = true;
   }
   if (voiceConvoActive && !voiceStopRequested) {
+    armPostTtsInputCooldown(isMobile ? 1800 : 1400);
     setConvoStatus('聆聽中…', true);
     await startRecording();
   }
@@ -1409,6 +1425,7 @@ function ttsReleaseMic() {
       try { await mve.reacquireMic(); } catch(e) { console.error('[ttsReleaseMic] reacquireMic 失敗:', e); }
     }
     if (canStartRecording()) {
+      armPostTtsInputCooldown(isMobile ? 1800 : 1400);
       setConvoStatus('聆聽中…', true);
       startRecording();
     } else if (voiceConvoActive && !voiceStopRequested) {
@@ -1418,12 +1435,14 @@ function ttsReleaseMic() {
         waited += 200;
         if (canStartRecording()) {
           clearInterval(poll);
+          armPostTtsInputCooldown(isMobile ? 1800 : 1400);
           setConvoStatus('聆聽中…', true);
           startRecording();
         } else if (waited >= 5000 || !voiceConvoActive) {
           clearInterval(poll);
           if (voiceConvoActive && !voiceStopRequested) {
             llmDone = true;
+            armPostTtsInputCooldown(isMobile ? 1800 : 1400);
             setConvoStatus('聆聽中…', true);
             startRecording();
           }
@@ -2234,7 +2253,7 @@ async function startVoiceConvo() {
           body: JSON.stringify({ text: normalizeTextForTts(greetingText), voice_id: ttsVoiceId }),
         });
         const data = await resp.json();
-        if (data.audio && voiceConvoActive) {
+    if (data.audio && voiceConvoActive) {
           if (isMobile && mve && mve.isInitialized) {
             currentAudio = { pause: () => { if (mve) mve.stopPlayback(); }, onended: null, onerror: null };
             await mve.playAudioB64(data.audio).catch(() => {});
@@ -2255,6 +2274,7 @@ async function startVoiceConvo() {
   }
 
   if (!voiceConvoActive || voiceStopRequested) return;
+  armPostTtsInputCooldown(isMobile ? 1800 : 1400);
   setConvoStatus('聆聽中…', true);
   await startRecording();
 }
@@ -2398,6 +2418,14 @@ async function startRecording() {
       let sum = 0;
       for (let i = 0; i < timeBuf.length; i++) sum += timeBuf[i] * timeBuf[i];
       const rms = Math.sqrt(sum / timeBuf.length);
+      if (performance.now() < ignoreSpeechUntil) {
+        speechFrames = 0;
+        if (silenceTimeout) { clearTimeout(silenceTimeout); silenceTimeout = null; }
+        if (noiseFrames >= 5 && rms < Math.max(noiseFloor * 2.5, 0.03)) {
+          noiseFloor = noiseFloor * 0.9 + rms * 0.1;
+        }
+        return;
+      }
       if (noiseFrames < 5) {
         noiseFloor = (noiseFloor * noiseFrames + rms) / (noiseFrames + 1);
         noiseFrames++; return;

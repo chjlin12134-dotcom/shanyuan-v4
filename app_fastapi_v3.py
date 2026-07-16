@@ -343,6 +343,36 @@ def clean_for_tts(text: str) -> str:
     )
     return text
 
+STT_HALLUCINATION_PATTERNS = [
+    "字幕", "訂閱", "按讚", "点赞", "轉發", "转发", "打賞", "打赏",
+    "明鏡", "明镜", "TVReview", "MACDA", "Amara", "MING PAO",
+    "請不吝", "感谢观看", "謝謝觀看", "thanks for watching",
+]
+
+def clean_transcript_for_voice_input(text: str) -> str:
+    """Drop common Whisper hallucinations caused by silence, tail audio, or background noise."""
+    transcript = re.sub(r"\s+", " ", (text or "")).strip()
+    if not transcript:
+        return ""
+    compact = re.sub(r"\s+", "", transcript)
+    ascii_letters = len(re.findall(r"[A-Za-z]", transcript))
+    cjk_chars = len(re.findall(r"[\u4e00-\u9fff]", transcript))
+    question_marks = transcript.count("?") + transcript.count("？")
+
+    if any(p.lower() in transcript.lower() for p in STT_HALLUCINATION_PATTERNS):
+        print(f"[STT filtered hallucination] {transcript[:120]}")
+        return ""
+    if question_marks >= 3 and cjk_chars == 0:
+        print(f"[STT filtered question-marks] {transcript[:120]}")
+        return ""
+    if ascii_letters >= 5 and ascii_letters > cjk_chars:
+        print(f"[STT filtered latin-noise] {transcript[:120]}")
+        return ""
+    if len(compact) <= 1:
+        print(f"[STT filtered too-short] {transcript[:120]}")
+        return ""
+    return transcript
+
 @app.post("/tts")
 async def tts(request: Request):
     import base64, tempfile, asyncio
@@ -446,6 +476,7 @@ async def transcribe(file: UploadFile = File(...)):
                 results = resp.json().get("results", [])
                 if results:
                     transcript = results[0]["alternatives"][0]["transcript"].strip()
+                    transcript = clean_transcript_for_voice_input(transcript)
                     if transcript:
                         print(f"[STT Google] {transcript}")
                         return JSONResponse({"transcript": transcript})
@@ -464,7 +495,7 @@ async def transcribe(file: UploadFile = File(...)):
             )
         result = resp.json()
         print(f"[STT Groq raw] status={resp.status_code} result={str(result)[:200]}")
-        transcript = result.get("text", "").strip()
+        transcript = clean_transcript_for_voice_input(result.get("text", ""))
         if transcript:
             print(f"[STT Groq] {transcript}")
             return JSONResponse({"transcript": transcript})
