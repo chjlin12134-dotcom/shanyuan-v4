@@ -1296,6 +1296,16 @@ function isCurrentEventsQuestion(text) {
   return CURRENT_EVENT_TERMS.some(w => t.includes(w));
 }
 
+function normalizeTextForTts(text) {
+  return String(text || '')
+    .replace(/沒關係/g, '梅關係')
+    .replace(/的確/g, '迪確')
+    .replace(/怎麼樣/g, '怎么樣')
+    .replace(/怎麼/g, '怎么')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 async function speakAssistantNotice(text, statusText = '善緣說話中…') {
   addMessage('assistant', text);
   if (voiceConvoActive && ttsAvailable && !ttsMuted) {
@@ -1306,7 +1316,7 @@ async function speakAssistantNotice(text, statusText = '善緣說話中…') {
       const r = await fetch('/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voice_id: ttsVoiceId }),
+        body: JSON.stringify({ text: normalizeTextForTts(text), voice_id: ttsVoiceId }),
       });
       const d = await r.json();
       if (d.audio && voiceConvoActive && !voiceStopRequested) {
@@ -1560,11 +1570,12 @@ async function flushTtsQueue() {
 }
 
 function enqueueTts(text) {
-  if (!text.trim()) return;
+  const ttsText = normalizeTextForTts(text);
+  if (!ttsText) return;
   const fetchPromise = fetch('/tts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, voice_id: ttsVoiceId }),
+    body: JSON.stringify({ text: ttsText, voice_id: ttsVoiceId }),
   }).then(r => r.json()).then(d => d.audio || null).catch(() => null);
   ttsQueue.push(fetchPromise);
   flushTtsQueue();
@@ -1732,7 +1743,7 @@ async function speakText(text, btnEl) {
     const resp = await fetch('/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voice_id: ttsVoiceId }),
+      body: JSON.stringify({ text: normalizeTextForTts(text), voice_id: ttsVoiceId }),
     });
     const data = await resp.json();
     if (!data.audio) throw new Error(data.error || 'TTS 失敗');
@@ -2060,13 +2071,8 @@ async function sendMessage(userText, skipTyping = false, opts = {}) {
     const decoder = new TextDecoder();
     let buffer = '';
 
-    // 分句 streaming TTS：邊收 token 邊湊句，第一句就送 TTS
-    let ttsBuffer = '';          // 累積待 TTS 的文字（每次 sendMessage 重置）
-    const TTS_SENTENCE_RE = /[。！？!?]/; // 句子邊界
-    // 手機：累積到 10 字就送第一句（不等句號，最快出聲，縮短波浪後空白到接近 0）
-    // 電腦：遇句號就送每一句
-    const MOBILE_FIRST_CHUNK = 10;
-    let firstTtsSent = false;
+    // 語音模式只在整段回覆完成後合成一次，避免多段 TTS 佇列反覆停麥/釋放麥克風。
+    let ttsQueuedForThisReply = false;
 
     // 每次 read() 加 30 秒逾時保護，避免 Groq 卡住造成前端永久凍結
     const readWithTimeout = () => new Promise((resolve, reject) => {
@@ -2090,14 +2096,7 @@ async function sendMessage(userText, skipTyping = false, opts = {}) {
             fullText += data.text;
             if (contentSpan) { contentSpan.textContent = fullText; scrollToBottom(); }
             if (isVoice && ttsAvailable && !ttsMuted) {
-              ttsBuffer += data.text;
-              // C2：手機與電腦統一用句號觸發，消除兩段 TTS 中間的斷字停頓
-              const hitBoundary = TTS_SENTENCE_RE.test(data.text) && ttsBuffer.trim().length >= 3;
-              if (hitBoundary) {
-                firstTtsSent = true;
-                enqueueTts(ttsBuffer.trim());
-                ttsBuffer = '';
-              }
+              ttsPlaybackDone = false;
             }
           } else if (data.type === 'blessing') {
             if (!blessingGiven) { pendingBlessing = { quote: data.quote, title: data.title, book: data.book }; }
@@ -2105,14 +2104,13 @@ async function sendMessage(userText, skipTyping = false, opts = {}) {
             if (isVoice && !firstTokenReceived) { firstTokenReceived = true; }
             messages.push({ role: 'assistant', content: data.full });
             if (isVoice && ttsAvailable && !ttsMuted) {
-              // 送出剩餘文字（未遇句號的尾段）
-              const remaining = ttsBuffer.trim();
-              if (remaining) { enqueueTts(remaining); ttsBuffer = ''; }
-              else if (!firstTtsSent && ttsQueue.length === 0 && !ttsPlaying) {
-                // 備援：整段回應無句號，送全文
-                enqueueTts(data.full);
+              const ttsText = (data.full || fullText).trim();
+              if (ttsText && !ttsQueuedForThisReply) {
+                ttsQueuedForThisReply = true;
+                enqueueTts(ttsText);
+              } else {
+                ttsPlaybackDone = true;
               }
-              // flushTtsQueue 已在 enqueueTts 內觸發，不需額外呼叫
             } else if (isVoice && voiceConvoActive) {
               removeTyping(); // C3：TTS 未啟用或已靜音，直接在此移除等待動畫
               setConvoStatus('聆聽中…', true);
@@ -2233,7 +2231,7 @@ async function startVoiceConvo() {
         const resp = await fetch('/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: greetingText, voice_id: ttsVoiceId }),
+          body: JSON.stringify({ text: normalizeTextForTts(greetingText), voice_id: ttsVoiceId }),
         });
         const data = await resp.json();
         if (data.audio && voiceConvoActive) {
@@ -2514,7 +2512,7 @@ async function handleRecordingDone(mimeType, mveBlob) {
         if (ttsAvailable && !ttsMuted) {
           micSuspendedByTts = true; ttsPlaybackDone = false;
           try {
-            const r = await fetch('/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: confirmText, voice_id: ttsVoiceId }) });
+            const r = await fetch('/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: normalizeTextForTts(confirmText), voice_id: ttsVoiceId }) });
             const d = await r.json();
             if (d.audio && voiceConvoActive) {
               if (isMobile && mve && mve.isInitialized) {

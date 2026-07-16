@@ -333,6 +333,14 @@ def clean_for_tts(text: str) -> str:
     text = re.sub(r'\s/\S+', ' ', text)
     # 移除多餘空白
     text = re.sub(r'\s+', ' ', text).strip()
+    # Edge TTS 不支援 phoneme；用 TTS 專用替音字修正常見誤讀。
+    text = (
+        text
+        .replace("沒關係", "梅關係")
+        .replace("的確", "迪確")
+        .replace("怎麼樣", "怎么樣")
+        .replace("怎麼", "怎么")
+    )
     return text
 
 @app.post("/tts")
