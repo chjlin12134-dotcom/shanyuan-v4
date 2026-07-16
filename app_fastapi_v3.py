@@ -333,6 +333,8 @@ def clean_for_tts(text: str) -> str:
     text = re.sub(r'\s/\S+', ' ', text)
     # 移除多餘空白
     text = re.sub(r'\s+', ' ', text).strip()
+    # edge-tts 句號停頓過長，轉短停頓，結尾不留贅字
+    text = text.replace('\u3002', '\uff0c').rstrip('\uff0c')
     return text
 
 @app.post("/tts")
@@ -487,7 +489,7 @@ async def chat(request: Request):
             "\n\n---\n"
             "【本輪提示】使用者正在道別。"
             "請用溫暖自然的語氣道別，結尾說：「再見。在你離開前，我為你準備了一句大師的話，讓你帶著走。請點祈福禮。」"
-            "說完這句就結束，不要再加其他話。每一句都要用句號結尾，讓語音自然停頓，不要用逗號連接長句。\n"
+            "說完這句就結束，不要再加其他話。用逗號代替句號，讓語音輕快自然。\n"
         )
 
     buddhist_instruction = ""
