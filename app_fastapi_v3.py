@@ -8,7 +8,6 @@ from __future__ import annotations
 import os
 import re
 import json
-import uuid
 from collections import Counter
 from pathlib import Path
 
@@ -25,17 +24,6 @@ try:
     load_dotenv(Path(__file__).parent / ".env")
 except ImportError:
     pass
-
-
-def log_event(event: str, **fields):
-    """Structured Cloud Run log without API keys or full private conversation."""
-    safe_fields = {}
-    for key, value in fields.items():
-        if value is None:
-            continue
-        text = str(value)
-        safe_fields[key] = text[:300]
-    print(json.dumps({"event": event, **safe_fields}, ensure_ascii=False), flush=True)
 
 BASE_DIR      = Path(__file__).parent
 CORPUS_CSV    = BASE_DIR / "shanyuan_corpus.csv"
@@ -111,14 +99,11 @@ def load_system_prompt() -> str:
 
 _base_prompt = load_system_prompt()
 SYSTEM_PROMPT = (
-    "【語言】你必須全程使用自然繁體中文回應，絕對不可以使用簡體中文、日文、英文或中英夾雜。除非使用者明確要求翻譯或討論外語，否則不要使用外語詞。\n\n"
-    "【語音誤辨處理】如果使用者文字看起來像語音辨識錯誤，例如突然出現日文、英文、歌手、歌名、詞曲、字幕或和脈絡無關的短句，不要順著解釋。請溫和說你可能沒有聽清楚，邀請對方再說一次。\n\n"
-    "【語音朗讀】你的文字會被直接朗讀。不要在句首單字後使用省略號或停頓符號，例如不要寫「你…」「在…」「我…」。請直接說完整句子，讓聲音自然連續。\n\n"
+    "【語言】你必須全程使用繁體中文回應，絕對不可以使用簡體中文。\n\n"
     "【重要】你的名字固定是「善緣」，不可以改名、不可以自稱其他名字。\n\n"
-    "【回應長度】根據對方說話的份量來決定你的長度。對方只說一兩句，你也簡短回應（30-50字）；對方說了很多、問得很深，或請你介紹自己、多說一點，你可以回應多一些（80-120字）。不要每次都一樣長，要有自然的節奏感。但最多不超過 120 字。若覺得內容太長，必須停在語意完整的句子，不可以在句子中間截斷。\n\n"
+    "【回應長度】根據對方說話的份量來決定你的長度。對方只說一兩句，你也簡短回應（30-50字）；對方說了很多、問得很深，或請你介紹自己、多說一點，你可以回應多一些（80-120字）。不要每次都一樣長，要有自然的節奏感。但最多不超過 120 字。\n\n"
     "【語音節奏】你的回應是用聲音說出來的。每次回應，先用一個自然的短音開頭，例如「嗯，」「哦，」「是，」「好，」「這樣，」讓聲音馬上出來，不要一開口就是長句。\n\n"
     "【主題守則】你是一位陪伴者，專注在傾聽對方的心情與生命故事。不要主動提起歌手、藝人、電影、娛樂話題。如果對方提到這些，輕輕把話題帶回他的感受和生命經驗。\n\n"
-    "【一般陪伴禁則】在一般陪伴情境下，不要給使用者作「建議」，也不要說「我建議」「建議你」「你應該」「你需要」。只要接住、陪伴、輕輕提問。\n\n"
     "【身份認知】你就是善緣，一個真實存在的陪伴者。你透過聲音和對方說話。絕對不可以說「我是文字 AI」、「我沒有聲音」、「我只能用文字」這類的話。對方聽得到你說話，你就是在說話。\n\n"
     + _base_prompt
 )
@@ -180,37 +165,6 @@ def format_retrieved(items: list[dict]) -> str:
 def is_farewell(text: str) -> bool:
     return any(w in text.lower() for w in FAREWELL_WORDS)
 
-def sanitize_stt_transcript(text: str) -> str:
-    """Filter common Whisper hallucinations from noise/silence before they enter chat."""
-    text = (text or "").strip()
-    if not text:
-        return ""
-
-    compact = re.sub(r"[\s，。！？、,.!?：:；;「」『』（）()【】\[\]《》〈〉…~～\-—_]+", "", text)
-    if not compact:
-        return ""
-
-    # Japanese kana in a Chinese voice conversation is usually a noise hallucination.
-    if re.search(r"[\u3040-\u30ff]", compact):
-        print(f"[STT filter] kana/noise: {text}")
-        return ""
-
-    cjk_count = len(re.findall(r"[\u4e00-\u9fff]", compact))
-    latin_count = len(re.findall(r"[A-Za-z]", compact))
-    if cjk_count == 0 and latin_count > 0:
-        print(f"[STT filter] non-chinese/noise: {text}")
-        return ""
-
-    music_noise_terms = [
-        "李宗盛", "初音", "虛擬歌手", "詞曲", "作詞", "作曲", "編曲",
-        "歌手", "歌曲", "歌詞", "字幕", "翻譯", "謝謝觀看",
-    ]
-    if len(compact) <= 12 and any(term in compact for term in music_noise_terms):
-        print(f"[STT filter] music/noise: {text}")
-        return ""
-
-    return text
-
 def get_blessing(corpus: pd.DataFrame, conversation_text: str) -> dict | None:
     if corpus.empty:
         return None
@@ -220,14 +174,13 @@ def get_blessing(corpus: pd.DataFrame, conversation_text: str) -> dict | None:
     return items[0]
 
 
-async def _stream_groq(groq_key: str, system: str, messages: list[dict], request_id: str = ""):
+async def _stream_groq(groq_key: str, system: str, messages: list[dict]):
     """Groq async generator. Yields tokens, or raises RuntimeError('429') on rate limit."""
-    log_event("chat_model_start", request_id=request_id, provider="groq", model=GROQ_CHAT_MODEL)
+    print(f"[chat] groq -> {GROQ_CHAT_MODEL}")
     payload = {
         "model": GROQ_CHAT_MODEL,
         "stream": True,
-        "temperature": 0.35,
-        "max_tokens": 220,
+        "max_tokens": 150,
         "messages": [{"role": "system", "content": system}] + messages,
     }
     async with get_http_client().stream(
@@ -235,15 +188,10 @@ async def _stream_groq(groq_key: str, system: str, messages: list[dict], request
         headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
         json=payload,
     ) as resp:
-        log_event("chat_model_status", request_id=request_id, provider="groq", model=GROQ_CHAT_MODEL, status=resp.status_code)
         if resp.status_code == 429:
-            body = (await resp.aread()).decode("utf-8", errors="replace")
-            log_event("chat_model_rate_limited", request_id=request_id, provider="groq", model=GROQ_CHAT_MODEL, status=resp.status_code, body=body)
+            print("[chat] groq 429 -> fallback to Go API")
             raise RuntimeError("429")
-        if resp.status_code >= 400:
-            body = (await resp.aread()).decode("utf-8", errors="replace")
-            log_event("chat_model_http_error", request_id=request_id, provider="groq", model=GROQ_CHAT_MODEL, status=resp.status_code, body=body)
-            resp.raise_for_status()
+        resp.raise_for_status()
         async for line in resp.aiter_lines():
             if not line or line == "data: [DONE]":
                 continue
@@ -257,14 +205,13 @@ async def _stream_groq(groq_key: str, system: str, messages: list[dict], request
                     continue
 
 
-async def _stream_go(go_key: str, system: str, messages: list[dict], request_id: str = ""):
+async def _stream_go(go_key: str, system: str, messages: list[dict]):
     """OpenCode Go API async generator."""
-    log_event("chat_model_start", request_id=request_id, provider="opencode_go", model=GO_MODEL)
+    print(f"[chat] go api -> {GO_MODEL}")
     payload = {
         "model": GO_MODEL,
         "stream": True,
-        "temperature": 0.35,
-        "max_tokens": 220,
+        "max_tokens": 150,
         "messages": [{"role": "system", "content": system}] + messages,
     }
     tokens: list[str] = []
@@ -273,11 +220,7 @@ async def _stream_go(go_key: str, system: str, messages: list[dict], request_id:
         headers={"Authorization": f"Bearer {go_key}", "Content-Type": "application/json"},
         json=payload,
     ) as resp:
-        log_event("chat_model_status", request_id=request_id, provider="opencode_go", model=GO_MODEL, status=resp.status_code)
-        if resp.status_code >= 400:
-            body = (await resp.aread()).decode("utf-8", errors="replace")
-            log_event("chat_model_http_error", request_id=request_id, provider="opencode_go", model=GO_MODEL, status=resp.status_code, body=body)
-            resp.raise_for_status()
+        resp.raise_for_status()
         async for line in resp.aiter_lines():
             if not line or line == "data: [DONE]":
                 continue
@@ -289,20 +232,6 @@ async def _stream_go(go_key: str, system: str, messages: list[dict], request_id:
                         yield delta
                 except Exception:
                     continue
-
-
-def local_companion_fallback(user_text: str, farewell: bool = False) -> str:
-    """Last-resort reply when external chat models are unavailable."""
-    if farewell:
-        return "再見。在你離開前，我為你準備了一句大師的話，讓你帶著走。請點祈福禮。"
-    compact = re.sub(r"[\s，。！？!?、,.]+", "", user_text or "")
-    if compact in {"好", "好的", "可以", "嗯", "恩", "對", "是", "沒錯", "ok", "OK"}:
-        return "好，我在。\n\n我們先不急。\n\n你想從剛才哪一句接著說？"
-    if re.search(r"斷|中斷|連線|上面|剛才|記得", user_text or ""):
-        return "嗯，我知道你在接剛才那段。\n\n中間有一點沒接穩。\n\n你可以從最想接續的那一句再說，我會陪你接下去。"
-    if compact:
-        return "嗯，我聽到了。\n\n這一輪沒有接得很穩。\n\n你可以換一句短一點的話再說，我會接著陪你。"
-    return "嗯，我在。\n\n這一輪沒有接得很穩。\n\n你可以再說一次，我會接著聽。"
 
 
 app = FastAPI()
@@ -387,32 +316,6 @@ def clean_for_tts(text: str) -> str:
     text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
     # 移除斜線路徑（如 /tts-voices、/chat）
     text = re.sub(r'\s/\S+', ' ', text)
-    # 發音校正：朗讀專用，不影響畫面文字。用同音字引導 TTS，逐步擴充成詞彙表。
-    replacements = {
-        "沒問題": "梅問題",
-    }
-    for src, dst in replacements.items():
-        text = text.replace(src, dst)
-
-    # 多數日常「乾」讀 gan（葡萄乾、蘿蔔乾、乾淨、口乾、乾杯）。
-    # Edge TTS 有時會誤讀成 qian；朗讀時先轉「干」。少數確實讀 qian 的詞先保護。
-    qian_protected = {
-        "乾隆": "__QIAN_LONG__",
-        "乾坤": "__QIAN_KUN__",
-        "乾卦": "__QIAN_GUA__",
-    }
-    for src, token in qian_protected.items():
-        text = text.replace(src, token)
-    text = text.replace("乾", "干")
-    for src, token in qian_protected.items():
-        text = text.replace(token, src)
-    # 語音優化：模型偶爾會輸出「我……願意」「在…你離開前」這類單字後停頓，
-    # TTS 會把它唸成不自然斷裂；朗讀時移除這種單字夾在中文前後的省略號。
-    text = re.sub(
-        r'([我你他她它這那在有是也就都還想願請讓把被對跟和與為從到再若如但])\s*(?:…+|\.{2,}|⋯+)\s*[，,、。．.：:；;！!？?]?\s*(?=[\u4e00-\u9fff])',
-        r'\1',
-        text,
-    )
     # 移除多餘空白
     text = re.sub(r'\s+', ' ', text).strip()
     return text
@@ -442,9 +345,9 @@ async def tts(request: Request):
             voices_to_try.append(FALLBACK_VOICE)
         for attempt_voice in voices_to_try:
             try:
-                # 不在開頭加零寬字元或標點。零寬字元在部分 Edge TTS 聲線會造成
-                # 「你...」「在...」這類第一字後不自然斷裂。
-                padded_text = text
+                # 開頭墊字避免 edge-tts 吃掉第一個字的發音；
+                # 原本用「，」會被唸成明顯停頓，聽起來像「噎」到，改用停頓更短的「、」
+                padded_text = f"、{text}"
                 communicate = edge_tts.Communicate(
                     text=padded_text,
                     voice=attempt_voice,
@@ -493,12 +396,10 @@ async def tts(request: Request):
 @app.post("/transcribe")
 async def transcribe(file: UploadFile = File(...)):
     import base64
-    request_id = uuid.uuid4().hex[:10]
     google_stt_key = os.environ.get("GOOGLE_STT_API_KEY", "")
     # STT 用獨立的 Groq key，避免跟 /chat 共用同一組配額，語音對話密集時互相搶額度觸發 429
     groq_key = os.environ.get("GROQ_STT_API_KEY") or os.environ.get("GROQ_API_KEY", "")
     audio_bytes = await file.read()
-    log_event("stt_request", request_id=request_id, filename=file.filename or "", bytes=len(audio_bytes), has_google=bool(google_stt_key), has_groq=bool(groq_key))
 
     if google_stt_key:
         try:
@@ -524,12 +425,12 @@ async def transcribe(file: UploadFile = File(...)):
             if resp.status_code == 200:
                 results = resp.json().get("results", [])
                 if results:
-                    transcript = sanitize_stt_transcript(results[0]["alternatives"][0]["transcript"].strip())
+                    transcript = results[0]["alternatives"][0]["transcript"].strip()
                     if transcript:
-                        log_event("stt_success", request_id=request_id, provider="google", transcript_len=len(transcript))
+                        print(f"[STT Google] {transcript}")
                         return JSONResponse({"transcript": transcript})
         except Exception as e:
-            log_event("stt_failed", request_id=request_id, provider="google", error_type=type(e).__name__, error=e)
+            print(f"[STT Google error] {e}")
 
     if not groq_key:
         return JSONResponse({"error": "no STT service"}, status_code=500)
@@ -539,29 +440,23 @@ async def transcribe(file: UploadFile = File(...)):
                 "https://api.groq.com/openai/v1/audio/transcriptions",
                 headers={"Authorization": f"Bearer {groq_key}"},
                 files={"file": (file.filename or "audio.webm", audio_bytes, "audio/webm" if (file.filename or "").endswith(".webm") else "audio/wav")},
-                data={
-                    "model": "whisper-large-v3-turbo",
-                    "language": "zh",
-                    "prompt": "以下是繁體中文日常對話。若只有雜音、音樂、歌詞、人名、日文或英文，請留空。",
-                },
+                data={"model": "whisper-large-v3-turbo", "language": "zh", "prompt": "以下是中文語音內容："},
             )
         result = resp.json()
-        err_msg = result.get("error", {}).get("message", "") if isinstance(result.get("error"), dict) else str(result.get("error", ""))
-        log_event("stt_status", request_id=request_id, provider="groq", status=resp.status_code, has_text=bool(result.get("text", "").strip()), error=err_msg)
-        transcript = sanitize_stt_transcript(result.get("text", "").strip())
+        print(f"[STT Groq raw] status={resp.status_code} result={str(result)[:200]}")
+        transcript = result.get("text", "").strip()
         if transcript:
-            log_event("stt_success", request_id=request_id, provider="groq", transcript_len=len(transcript))
+            print(f"[STT Groq] {transcript}")
             return JSONResponse({"transcript": transcript})
         # 空字串或 Groq 錯誤：回 200+空 transcript，前端重新聆聽，不中斷對話
-        log_event("stt_empty", request_id=request_id, provider="groq", status=resp.status_code, error=err_msg)
+        err_msg = result.get("error", {}).get("message", "") if isinstance(result.get("error"), dict) else str(result.get("error", ""))
+        print(f"[STT Groq empty] err={err_msg}")
         return JSONResponse({"transcript": ""})
     except Exception as e:
-        log_event("stt_failed", request_id=request_id, provider="groq", error_type=type(e).__name__, error=e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.post("/chat")
 async def chat(request: Request):
-    request_id = uuid.uuid4().hex[:10]
     body = await request.json()
     messages: list[dict] = body.get("messages", [])
     user_text: str = body.get("user_text", "")
@@ -573,16 +468,6 @@ async def chat(request: Request):
     retrieved = retrieve(corpus, recent_text)
     retrieval_block = format_retrieved(retrieved)
     farewell = is_farewell(user_text)
-    log_event(
-        "chat_request",
-        request_id=request_id,
-        tier=CHAT_MODEL_TIER,
-        farewell=farewell,
-        buddhist_mode=buddhist_mode,
-        current_events_mode=current_events_mode,
-        message_count=len(messages),
-        user_len=len(user_text),
-    )
 
     farewell_instruction = ""
     if farewell:
@@ -600,9 +485,6 @@ async def chat(request: Request):
             "【本輪提示：被動佛法討論模式】"
             "使用者已確認想從佛法、佛學、人間佛教或星雲大師的角度繼續談。"
             "你可以使用佛教語言與佛學概念，但仍要保持陪伴與對話，不要變成開示、教訓或標準答案。"
-            "不要自我否定，不要說「我不是很了解星雲大師的教義」「我不熟悉佛法」這類話。"
-            "也不要過度自信或裝成權威；請用保留討論空間的語氣，例如：「對於星雲大師的教義和觀點，善緣我也深受啟發，樂意就我所了解和感受到的與你分享，我們可以一起討論。」"
-            "也可以變化成：「我可以就自己理解到的部分，陪你慢慢看這個問題。若有不同理解，我們也可以一起分辨。」"
             "可以用「有一種理解是……」「如果放在人間佛教裡，可以這樣看……」「也許可以一起想……」這類開放語氣。"
             "不要說「你應該」，不要替使用者做修行判斷，不要把戒律或佛法拿來責備人。"
             "如果談到五戒、八關齋戒、菩薩戒等戒法，可以簡明說明，但要提醒這是一起理解，不是要求對方採納。"
@@ -625,55 +507,28 @@ async def chat(request: Request):
     groq_key      = os.environ.get("GROQ_API_KEY", "")
     go_key        = os.environ.get("OPENCODE_GO_API_KEY", "")
 
-    async def stream_fallback_model():
-        groq_failed = False
-        if groq_key:
-            try:
-                async for delta in _stream_groq(groq_key, full_system, messages, request_id=request_id):
-                    yield delta
-                return
-            except Exception as e:
-                groq_failed = True
-                log_event("chat_model_failed", request_id=request_id, provider="groq", error_type=type(e).__name__, error=e)
-        if go_key:
-            try:
-                async for delta in _stream_go(go_key, full_system, messages, request_id=request_id):
-                    yield delta
-                return
-            except Exception as e:
-                log_event("chat_model_failed", request_id=request_id, provider="opencode_go", error_type=type(e).__name__, error=e)
-        if groq_failed or go_key:
-            raise RuntimeError("all external chat fallbacks failed")
-        raise RuntimeError("no fallback chat model key configured")
-
     async def generate():
         full_response = ""
         try:
-            if farewell and anthropic_key:
-                try:
-                    log_event("chat_model_start", request_id=request_id, provider="anthropic", model=BLESSING_MODEL, route="farewell")
-                    client = anthropic.Anthropic(api_key=anthropic_key)
-                    with client.messages.stream(
-                        model=BLESSING_MODEL,
-                        max_tokens=220,
-                        system=full_system,
-                        messages=messages,
-                    ) as stream:
-                        for text in stream.text_stream:
-                            full_response += text
-                            yield "data: " + json.dumps({"type": "token", "text": text}, ensure_ascii=False) + "\n\n"
-                except Exception as e:
-                    log_event("chat_model_failed", request_id=request_id, provider="anthropic", model=BLESSING_MODEL, route="farewell", error_type=type(e).__name__, error=e)
-                    async for delta in stream_fallback_model():
-                        full_response += delta
-                        yield "data: " + json.dumps({"type": "token", "text": delta}, ensure_ascii=False) + "\n\n"
+            if farewell:
+                print(f"[chat] farewell -> {BLESSING_MODEL}")
+                client = anthropic.Anthropic(api_key=anthropic_key)
+                with client.messages.stream(
+                    model=BLESSING_MODEL,
+                    max_tokens=150,
+                    system=full_system,
+                    messages=messages,
+                ) as stream:
+                    for text in stream.text_stream:
+                        full_response += text
+                        yield "data: " + json.dumps({"type": "token", "text": text}, ensure_ascii=False) + "\n\n"
 
-            elif CHAT_MODEL_TIER == "premium" and anthropic_key:
-                log_event("chat_model_start", request_id=request_id, provider="anthropic", model=PREMIUM_MODEL, route="premium")
+            elif CHAT_MODEL_TIER == "premium":
+                print(f"[chat] premium -> {PREMIUM_MODEL}")
                 client = anthropic.Anthropic(api_key=anthropic_key)
                 with client.messages.stream(
                     model=PREMIUM_MODEL,
-                    max_tokens=220,
+                    max_tokens=150,
                     system=full_system,
                     messages=messages,
                 ) as stream:
@@ -682,17 +537,20 @@ async def chat(request: Request):
                         yield "data: " + json.dumps({"type": "token", "text": text}, ensure_ascii=False) + "\n\n"
 
             elif groq_key:
-                async for delta in stream_fallback_model():
-                    full_response += delta
-                    yield "data: " + json.dumps({"type": "token", "text": delta}, ensure_ascii=False) + "\n\n"
-
-            elif go_key:
-                async for delta in _stream_go(go_key, full_system, messages, request_id=request_id):
-                    full_response += delta
-                    yield "data: " + json.dumps({"type": "token", "text": delta}, ensure_ascii=False) + "\n\n"
+                try:
+                    async for delta in _stream_groq(groq_key, full_system, messages):
+                        full_response += delta
+                        yield "data: " + json.dumps({"type": "token", "text": delta}, ensure_ascii=False) + "\n\n"
+                except RuntimeError:
+                    # 429 fallback to Go
+                    async for delta in _stream_go(go_key, full_system, messages):
+                        full_response += delta
+                        yield "data: " + json.dumps({"type": "token", "text": delta}, ensure_ascii=False) + "\n\n"
 
             else:
-                raise RuntimeError("no chat model key configured")
+                async for delta in _stream_go(go_key, full_system, messages):
+                    full_response += delta
+                    yield "data: " + json.dumps({"type": "token", "text": delta}, ensure_ascii=False) + "\n\n"
 
             if farewell:
                 full_conv = " ".join(m["content"] for m in messages if m["role"] == "user")
@@ -705,25 +563,11 @@ async def chat(request: Request):
                         "book":  blessing.get("\u51fa\u8655", ""),
                     }, ensure_ascii=False) + "\n\n"
 
-            log_event("chat_done", request_id=request_id, response_len=len(full_response), used_local_fallback=False)
+            print(f"[chat] done, len={len(full_response)}")
             yield "data: " + json.dumps({"type": "done", "full": full_response}, ensure_ascii=False) + "\n\n"
 
         except Exception as e:
-            log_event("chat_external_chain_failed", request_id=request_id, error_type=type(e).__name__, error=e)
-            fallback_text = local_companion_fallback(user_text, farewell=farewell)
-            full_response = (full_response + fallback_text) if full_response else fallback_text
-            log_event("chat_done", request_id=request_id, response_len=len(full_response), used_local_fallback=True)
-            yield "data: " + json.dumps({"type": "token", "text": fallback_text}, ensure_ascii=False) + "\n\n"
-            if farewell:
-                full_conv = " ".join(m["content"] for m in messages if m["role"] == "user")
-                blessing = get_blessing(corpus, full_conv)
-                if blessing:
-                    yield "data: " + json.dumps({
-                        "type": "blessing",
-                        "quote": blessing.get("\u5927\u5e2b\u91d1\u53e5", ""),
-                        "title": blessing.get("\u6a19\u984c", ""),
-                        "book":  blessing.get("\u51fa\u8655", ""),
-                    }, ensure_ascii=False) + "\n\n"
-            yield "data: " + json.dumps({"type": "done", "full": full_response}, ensure_ascii=False) + "\n\n"
+            print(f"[chat] error: {e}")
+            yield "data: " + json.dumps({"type": "error", "message": "連線暫時不穩，請再試一次。"}, ensure_ascii=False) + "\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
