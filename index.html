@@ -1177,7 +1177,7 @@ class MobileVoiceEngine {
         noiseFrames++; return;
       }
 
-      const THRESHOLD = Math.max(noiseFloor * 1.8, 0.01);
+      const THRESHOLD = Math.max(noiseFloor * 2.4, 0.02);
       // 與 THRESHOLD 用同一條線，消除「灰色地帶」卡住不判定的情況
       const silenceThreshold = THRESHOLD;
 
@@ -1188,7 +1188,7 @@ class MobileVoiceEngine {
 
       if (rms > THRESHOLD) {
         speechFrames++;
-        if (speechFrames >= 2 && !this.hasSpeech) {
+        if (speechFrames >= 8 && !this.hasSpeech) {
           this.hasSpeech = true;
           console.log('[MVE2] 偵測到說話 rms:', rms.toFixed(4), 'floor:', noiseFloor.toFixed(4));
         }
@@ -2430,11 +2430,11 @@ async function startRecording() {
         noiseFloor = (noiseFloor * noiseFrames + rms) / (noiseFrames + 1);
         noiseFrames++; return;
       }
-      const THRESHOLD = Math.max(noiseFloor * 1.4, 0.006);
+      const THRESHOLD = Math.max(noiseFloor * 2.2, 0.012);
       const silenceThreshold = hasSpeech ? 0.015 : THRESHOLD;
       if (rms > THRESHOLD) {
         speechFrames++;
-        if (speechFrames >= 2 && !hasSpeech) {
+        if (speechFrames >= 8 && !hasSpeech) {
           hasSpeech = true;
           console.log(`[錄音] hasSpeech=true rms=${rms.toFixed(4)}`);
         }

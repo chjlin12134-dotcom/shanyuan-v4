@@ -373,6 +373,23 @@ def clean_transcript_for_voice_input(text: str) -> str:
         return ""
     return transcript
 
+def is_low_confidence_stt(result: dict) -> bool:
+    segments = result.get("segments") if isinstance(result, dict) else None
+    if not isinstance(segments, list) or not segments:
+        return False
+    probs = [
+        s.get("no_speech_prob")
+        for s in segments
+        if isinstance(s, dict) and isinstance(s.get("no_speech_prob"), (int, float))
+    ]
+    if not probs:
+        return False
+    avg_no_speech = sum(probs) / len(probs)
+    if avg_no_speech >= 0.55:
+        print(f"[STT filtered no-speech-prob] {avg_no_speech:.2f}")
+        return True
+    return False
+
 @app.post("/tts")
 async def tts(request: Request):
     import base64, tempfile, asyncio
@@ -491,10 +508,18 @@ async def transcribe(file: UploadFile = File(...)):
                 "https://api.groq.com/openai/v1/audio/transcriptions",
                 headers={"Authorization": f"Bearer {groq_key}"},
                 files={"file": (file.filename or "audio.webm", audio_bytes, "audio/webm" if (file.filename or "").endswith(".webm") else "audio/wav")},
-                data={"model": "whisper-large-v3-turbo", "language": "zh", "prompt": "以下是中文語音內容："},
+                data={
+                    "model": "whisper-large-v3-turbo",
+                    "language": "zh",
+                    "temperature": "0",
+                    "response_format": "verbose_json",
+                    "prompt": "以下是繁體中文語音內容。若沒有清楚人聲，請回傳空白。",
+                },
             )
         result = resp.json()
         print(f"[STT Groq raw] status={resp.status_code} result={str(result)[:200]}")
+        if is_low_confidence_stt(result):
+            return JSONResponse({"transcript": ""})
         transcript = clean_transcript_for_voice_input(result.get("text", ""))
         if transcript:
             print(f"[STT Groq] {transcript}")
@@ -613,6 +638,12 @@ async def chat(request: Request):
                         "title": blessing.get("\u6a19\u984c", ""),
                         "book":  blessing.get("\u51fa\u8655", ""),
                     }, ensure_ascii=False) + "\n\n"
+
+            if not full_response.strip():
+                fallback_text = "我剛剛沒有聽清楚，你可以再說一次嗎？"
+                full_response = fallback_text
+                print("[chat] empty response -> clarification fallback")
+                yield "data: " + json.dumps({"type": "token", "text": fallback_text}, ensure_ascii=False) + "\n\n"
 
             print(f"[chat] done, len={len(full_response)}")
             yield "data: " + json.dumps({"type": "done", "full": full_response}, ensure_ascii=False) + "\n\n"
