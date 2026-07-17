@@ -2075,7 +2075,10 @@ async function sendMessage(userText, skipTyping = false, opts = {}) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        messages,
+        // messages 只增不減，長對話會讓每次送給 Groq 的 token 數一直長大，
+        // 講到後面很容易單分鐘超過 rate limit 被迫 fallback 到較慢的備援模型。
+        // 只送最近幾輪，陪伴對話不需要記得太久以前的細節。
+        messages: messages.slice(-12),
         user_text: userText,
         buddhist_mode: opts.forceBuddhistMode || buddhistDiscussionMode,
         current_events_mode: isCurrentEventsQuestion(userText),
