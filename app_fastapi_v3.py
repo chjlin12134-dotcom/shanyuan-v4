@@ -143,7 +143,7 @@ def retrieve(corpus: pd.DataFrame, query: str, k: int = MAX_RETRIEVED) -> list[d
     scores.sort(reverse=True)
     return [corpus.iloc[i].to_dict() for _, i in scores[:k]]
 
-def format_retrieved(items: list[dict]) -> str:
+def format_retrieved(items: list[dict], buddhist_mode: bool = False) -> str:
     if not items:
         return ""
     COL_QUOTE   = "大師金句"
@@ -156,9 +156,13 @@ def format_retrieved(items: list[dict]) -> str:
         accomp = it.get(COL_ACCOMP, '')[:60]
         source = it.get(COL_SOURCE, '')
         blocks.append(f"[{i}] 金句：{quote} / 陪伴語：{accomp} / 出處：{source}\n")
+    blocks.append("不要照念，逐字念出參考語料。\n")
+    if buddhist_mode:
+        blocks.append("使用者已經進入佛法討論模式，可以自然提到星雲大師的名字，不用刻意迴避。\n")
+    else:
+        blocks.append("日常對話不用主動提出處或大師名字，除非使用者自己先問到佛法、大師相關的事。\n")
     blocks.append(
-        "不要照念，日常對話不用主動提出處或大師名字。"
-        "但如果使用者直接問「這是哪裡看到的、哪本書、根據什麼」，"
+        "如果使用者直接問「這是哪裡看到的、哪本書、根據什麼」，"
         "而你剛好用了上面某一則參考語料的內容，就誠實說出對應的出處（例如「這是《出處》裡的說法」）；"
         "如果你講的其實是你對大師思想的理解或歸納，不是逐字引用上面的語料，"
         "就誠實說「這是我從大師整體教導歸納的理解，不是特定某一句原文」，"
@@ -556,7 +560,7 @@ async def chat(request: Request):
     corpus = get_corpus()
     recent_text = " ".join(m["content"] for m in messages[-3:] if m["role"] == "user")
     retrieved = retrieve(corpus, recent_text)
-    retrieval_block = format_retrieved(retrieved)
+    retrieval_block = format_retrieved(retrieved, buddhist_mode=buddhist_mode)
     farewell = is_farewell(user_text)
 
     farewell_instruction = ""
