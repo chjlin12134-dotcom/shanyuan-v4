@@ -151,7 +151,9 @@ SOURCE_CHECK_TERMS = [
 def is_source_check_question(text: str) -> bool:
     return any(w in text for w in SOURCE_CHECK_TERMS)
 
-SOURCE_CHECK_THRESHOLD = 4
+# 門檻依實測校準：近乎逐字引用的分數約 50，主題相近但沒有真的引用的鬆散比喻約 13。
+# 25 落在中間、偏保守——寧可少報一點出處（誠實說是自己的理解），也不要對沒有真正引用的內容自信地報錯出處。
+SOURCE_CHECK_THRESHOLD = 25
 
 def verify_source(corpus: pd.DataFrame, prior_reply: str) -> dict | None:
     """針對善緣上一輪實際講的話，重新查一次語料庫，回傳最相關的那筆（含比對分數），
