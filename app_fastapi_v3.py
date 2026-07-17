@@ -143,6 +143,35 @@ def retrieve(corpus: pd.DataFrame, query: str, k: int = MAX_RETRIEVED) -> list[d
     scores.sort(reverse=True)
     return [corpus.iloc[i].to_dict() for _, i in scores[:k]]
 
+SOURCE_CHECK_TERMS = [
+    "哪本書", "哪裡看到", "哪裡說的", "哪本經", "出處", "根據什麼",
+    "真的是大師說的", "確定是大師", "從哪裡來的", "你怎麼知道", "你確定",
+]
+
+def is_source_check_question(text: str) -> bool:
+    return any(w in text for w in SOURCE_CHECK_TERMS)
+
+SOURCE_CHECK_THRESHOLD = 4
+
+def verify_source(corpus: pd.DataFrame, prior_reply: str) -> dict | None:
+    """針對善緣上一輪實際講的話，重新查一次語料庫，回傳最相關的那筆（含比對分數），
+    分數不夠高就當作查無確切出處，不能讓模型自己憑印象聲稱出處。"""
+    if corpus.empty or not prior_reply:
+        return None
+    q_tokens = Counter(tokenize(prior_reply))
+    if not q_tokens:
+        return None
+    best_score, best_idx = 0, None
+    for idx, row in corpus.iterrows():
+        doc = f"{row.get('標題','')} {row.get('大師金句','')} {row.get('具體故事','')} {row.get('善緣陪伴語','')}"
+        d_tokens = Counter(tokenize(doc))
+        score = sum(min(q_tokens[t], d_tokens[t]) for t in q_tokens if t in d_tokens)
+        if score > best_score:
+            best_score, best_idx = score, idx
+    if best_idx is None or best_score < SOURCE_CHECK_THRESHOLD:
+        return None
+    return corpus.iloc[best_idx].to_dict()
+
 def format_retrieved(items: list[dict], buddhist_mode: bool = False) -> str:
     if not items:
         return ""
@@ -162,12 +191,14 @@ def format_retrieved(items: list[dict], buddhist_mode: bool = False) -> str:
     else:
         blocks.append("日常對話不用主動提出處或大師名字，除非使用者自己先問到佛法、大師相關的事。\n")
     blocks.append(
-        "如果使用者直接問「這是哪裡看到的、哪本書、根據什麼」，"
-        "而你剛好用了上面某一則參考語料的內容，就照參考語料裡「出處」欄位給的原字精準說出來"
-        "（例如出處是「如是說4」，就要說「如是說4」，不能自己模糊成「如是說等書」「大師的著作」這種說法，卷數、集數不能省略）；"
-        "如果你講的其實是你對大師思想的理解或歸納，不是逐字引用上面的語料，"
-        "就誠實說「這是我從大師整體教導歸納的理解，不是特定某一句原文」，"
-        "不要含糊地說忘記書名，也不要編造一個聽起來像真的、但其實不存在的出處。\n"
+        "【重要】每次要提到大師的想法或佛法內容之前，先在心裡分清楚這句話屬於哪一層，並用對應的語氣講："
+        "(1) 直接貼近上面參考語料的內容 → 可以說「大師在《出處》裡提到……」，出處要照原字精準講，例如「如是說4」不能模糊成「如是說等書」；"
+        "(2) 大師教導的一般精神、沒有對應到特定出處 → 用「大師常說……」「大師的教導裡有一種精神是……」；"
+        "(3) 其實是你自己對佛法的理解、詮釋、聯想 → 用「我自己的理解是……」「我覺得……」，不要包裝成大師說的話。"
+        "這個判斷要在你講出這句話的當下就做好，不是等被問才決定。"
+        "這樣之後不管有沒有被追問「這真的是大師說的嗎、哪裡來的」，你都只是把原本就講清楚的立場再說一次，"
+        "不會有「其實我不確定、我記錯了」這種前後不一致、顯得不可信的情況——"
+        "被質疑當下才承認不知道，是最傷信任感的事，絕對要避免。也絕對不要編造一個聽起來像真的、但其實不存在的出處。\n"
     )
     return "".join(blocks)
 
@@ -588,6 +619,27 @@ async def chat(request: Request):
             "結尾仍把空間還給使用者，用一句短問題邀請他繼續說。\n"
         )
 
+    source_check_instruction = ""
+    if buddhist_mode and is_source_check_question(user_text):
+        prior_assistant = next((m["content"] for m in reversed(messages) if m["role"] == "assistant"), "")
+        verified = verify_source(corpus, prior_assistant)
+        if verified:
+            v_source = verified.get("出處", "")
+            v_quote = verified.get("大師金句", "")[:80]
+            source_check_instruction = (
+                "\n\n---\n"
+                "【本輪提示：出處查證】使用者在追問你上一句話的出處，系統剛用你上一輪實際講的內容重新比對了語料庫，"
+                f"查到高度相關的一筆：出處「{v_source}」，原句「{v_quote}」。"
+                f"請照這個查證結果回答，明確講出「{v_source}」這個出處，不要換一個模糊的說法。\n"
+            )
+        else:
+            source_check_instruction = (
+                "\n\n---\n"
+                "【本輪提示：出處查證】使用者在追問你上一句話的出處，系統剛用你上一輪實際講的內容重新比對了語料庫，"
+                "沒有查到夠相關、可以精準引用的出處。請誠實告訴使用者：這是你自己對大師思想的理解或歸納，不是逐字引用某一本書，"
+                "不要說「不記得」「記錯了」，要清楚、坦然地說明這是你的理解，不是原文。\n"
+            )
+
     current_events_instruction = ""
     if current_events_mode:
         current_events_instruction = (
@@ -599,7 +651,7 @@ async def chat(request: Request):
             "重點放在事件帶給使用者的感受、困惑、價值衝突或生命經驗，不要變成新聞分析機。\n"
         )
 
-    full_system = SYSTEM_PROMPT + retrieval_block + farewell_instruction + buddhist_instruction + current_events_instruction
+    full_system = SYSTEM_PROMPT + retrieval_block + farewell_instruction + buddhist_instruction + source_check_instruction + current_events_instruction
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
     groq_key      = os.environ.get("GROQ_API_KEY", "")
     go_key        = os.environ.get("OPENCODE_GO_API_KEY", "")
