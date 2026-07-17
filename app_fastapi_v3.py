@@ -409,11 +409,14 @@ async def tts(request: Request):
     # --- Edge TTS ---
     if voice_cfg["id"].startswith("EDGE-"):
         import edge_tts
-        FALLBACK_VOICE = "zh-TW-HsiaoChenNeural"
-        voices_to_try = [voice_cfg["voice"]]
-        if voice_cfg["voice"] != FALLBACK_VOICE:
-            voices_to_try.append(FALLBACK_VOICE)
-        for attempt_voice in voices_to_try:
+        # fallback 一定要跟原聲線同性別，避免選男聲卻聽到女聲（或反過來）
+        is_male = voice_cfg["id"].startswith("EDGE-M")
+        SAME_GENDER_FALLBACK = "zh-TW-YunJheNeural" if is_male else "zh-TW-HsiaoChenNeural"
+        # 先重試同一聲線一次：edge_tts 的 "No audio received" 多半是暫時性網路問題，重試就會過
+        voices_to_try = [voice_cfg["voice"], voice_cfg["voice"]]
+        if voice_cfg["voice"] != SAME_GENDER_FALLBACK:
+            voices_to_try.append(SAME_GENDER_FALLBACK)
+        for i, attempt_voice in enumerate(voices_to_try):
             try:
                 communicate = edge_tts.Communicate(
                     text=text,
@@ -429,11 +432,11 @@ async def tts(request: Request):
                     raise Exception("No audio received")
                 audio_bytes = b"".join(audio_chunks)
                 audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
-                print(f"[TTS Edge] voice={attempt_voice} len={len(audio_bytes)}")
+                print(f"[TTS Edge] attempt={i} voice={attempt_voice} len={len(audio_bytes)}")
                 return JSONResponse({"audio": audio_b64})
             except Exception as e:
-                print(f"[TTS Edge error] voice={attempt_voice} {e}")
-                if attempt_voice == voices_to_try[-1]:
+                print(f"[TTS Edge error] attempt={i} voice={attempt_voice} {e}")
+                if i == len(voices_to_try) - 1:
                     return JSONResponse({"error": str(e)}, status_code=500)
                 continue
 
