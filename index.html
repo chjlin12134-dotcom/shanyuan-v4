@@ -1288,12 +1288,17 @@ const CURRENT_EVENT_TERMS = [
   '戰爭', '災難', '地震', '選舉', '政策', '法案', '名人', '公司', 'AI 發展', '人工智慧',
 ];
 
-function isAffirmative(text) {
-  return /^(好|可以|是|對|嗯|沒錯|確定|要|想|願意|ok|yes|好啊|可以啊|我想|我願意)/i.test(text.trim());
-}
-
 function isNegative(text) {
   return /^(不用|不要|不是|先不要|不想|沒有|算了|no|不用了|先不用)/i.test(text.trim());
+}
+
+function isAffirmative(text) {
+  const t = text.trim();
+  if (isNegative(t)) return false;
+  // 開頭是肯定詞 → 肯定；自然口語常不會把肯定詞放在句首（例如「特別是想知道大師怎麼說」），
+  // 所以也接受句中出現明確的意圖詞
+  if (/^(好|可以|是|對|嗯|沒錯|確定|要|想|願意|ok|yes)/i.test(t)) return true;
+  return /(想知道|想聽|想談|想聊|想從.*角度|好啊|可以啊|我想|我願意)/i.test(t);
 }
 
 function shouldAskBuddhistConfirm(text) {

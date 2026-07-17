@@ -347,6 +347,7 @@ STT_HALLUCINATION_PATTERNS = [
     "字幕", "訂閱", "按讚", "点赞", "轉發", "转发", "打賞", "打赏",
     "明鏡", "明镜", "TVReview", "MACDA", "Amara", "MING PAO",
     "請不吝", "感谢观看", "謝謝觀看", "thanks for watching",
+    "詞曲", "作詞", "作曲", "編曲", "编曲", "監製", "监制",
 ]
 
 def clean_transcript_for_voice_input(text: str) -> str:
