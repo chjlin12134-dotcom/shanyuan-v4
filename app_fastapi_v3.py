@@ -226,7 +226,11 @@ async def _stream_go(go_key: str, system: str, messages: list[dict]):
     payload = {
         "model": GO_MODEL,
         "stream": True,
-        "max_tokens": 150,
+        # deepseek-v4-flash 是推理模型，回覆前會先吐一大段 reasoning_content。
+        # 拿掉之前 max_tokens=150 常常整個預算都被 reasoning 吃光，
+        # finish_reason=length，真正的 content 從沒出現過（空字串），
+        # 導致每次 Groq 429 fallback 到這裡都變成罐頭「沒聽清楚」。
+        "max_tokens": 600,
         "messages": [{"role": "system", "content": system}] + messages,
     }
     tokens: list[str] = []
