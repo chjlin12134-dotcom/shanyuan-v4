@@ -409,13 +409,15 @@ async def tts(request: Request):
     # --- Edge TTS ---
     if voice_cfg["id"].startswith("EDGE-"):
         import edge_tts
-        # fallback 一定要跟原聲線同性別，避免選男聲卻聽到女聲（或反過來）
-        is_male = voice_cfg["id"].startswith("EDGE-M")
-        SAME_GENDER_FALLBACK = "zh-TW-YunJheNeural" if is_male else "zh-TW-HsiaoChenNeural"
+        # fallback 一定要跟原聲線同性別，避免選男聲卻聽到女聲（或反過來）；
+        # 且 fallback 必須是「真的不同」的聲線，不能跟原聲線一樣（M1/M2 本身就用
+        # zh-TW-YunJheNeural，若原聲線掛掉，fallback 選同一個等於沒有 fallback）
+        MALE_VOICES = ["zh-TW-YunJheNeural", "zh-CN-YunjianNeural"]
+        FEMALE_VOICES = ["zh-TW-HsiaoChenNeural", "zh-CN-XiaoxiaoNeural"]
+        gender_pool = MALE_VOICES if voice_cfg["id"].startswith("EDGE-M") else FEMALE_VOICES
+        SAME_GENDER_FALLBACK = next((v for v in gender_pool if v != voice_cfg["voice"]), gender_pool[0])
         # 先重試同一聲線一次：edge_tts 的 "No audio received" 多半是暫時性網路問題，重試就會過
-        voices_to_try = [voice_cfg["voice"], voice_cfg["voice"]]
-        if voice_cfg["voice"] != SAME_GENDER_FALLBACK:
-            voices_to_try.append(SAME_GENDER_FALLBACK)
+        voices_to_try = [voice_cfg["voice"], voice_cfg["voice"], SAME_GENDER_FALLBACK]
         for i, attempt_voice in enumerate(voices_to_try):
             try:
                 communicate = edge_tts.Communicate(
