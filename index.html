@@ -972,6 +972,7 @@ class MobileVoiceEngine {
 
     // 新建 MediaRecorder，使用全局 micStream
     this.mediaRecorder = new MediaRecorder(this.micStream, { mimeType });
+    this._mimeType = mimeType; // 供靜音偵測迴圈異常結束時的 _fireDone fallback 使用
     const mr = this.mediaRecorder; // 閉包捕捉，避免競爭
 
     mr.ondataavailable = (e) => {
@@ -1155,8 +1156,23 @@ class MobileVoiceEngine {
     }, 180000);
 
     this._silenceInterval = setInterval(() => {
-      if (!this.isRecording || !this.mediaRecorder || this.mediaRecorder.state !== 'recording') {
-        this._clearSilence(); return;
+      if (!this.isRecording) { this._clearSilence(); return; }
+      if (!this.mediaRecorder || this.mediaRecorder.state !== 'recording') {
+        // 錄音在非預期情況下中斷（例如手機背景切換/螢幕鎖定時系統暫停了錄音，
+        // 但沒有真的觸發 MediaRecorder 的 onstop 事件）。
+        // 如果只是清掉計時器就 return，isRecording 會永遠卡在 true，
+        // 導致往後每次 startRecording() 都被 MVE2.startRecording() 的
+        // 「已在錄音」防呆擋掉、永遠卡在「聆聽中」沒有任何反應。
+        // 這裡改成主動呼叫 _fireDone 結束本輪（chunks 可能是空的，
+        // 呼叫端 handleRecordingDone 會把它當成沒聽到聲音、自動重新開始聆聽）。
+        console.warn('[MVE2] silence loop 偵測到 mediaRecorder 非 recording 狀態，強制結束本輪並復原');
+        this._clearSilence();
+        if (this.micStream && this.micStream.getAudioTracks().some(t => t.readyState === 'ended')) {
+          console.warn('[MVE2] mic track 已中斷，清空 micStream 讓下一輪重新取得');
+          this.micStream = null;
+        }
+        this._fireDone(this._mimeType || 'audio/webm');
+        return;
       }
       analyser.getFloatTimeDomainData(timeBuf);
       let sum = 0;
@@ -1214,6 +1230,16 @@ class MobileVoiceEngine {
     this._clearSilence();
     if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
       this.mediaRecorder.stop(); // onstop 會呼叫 _fireDone
+    } else {
+      // mediaRecorder 已經不是 recording 狀態（可能被系統中斷，例如手機背景切換/
+      // 螢幕鎖定），但 onstop 事件並未真的觸發過。這裡若什麼都不做，isRecording
+      // 會永遠卡在 true，往後每次 startRecording() 都會被「已在錄音」防呆擋掉，
+      // 使用者就會卡在「聆聽中」永遠沒有反應。直接呼叫 _fireDone 復原本輪。
+      console.warn('[MVE2] _stopAndFire: mediaRecorder 非 recording 狀態，直接 fireDone 復原');
+      if (this.micStream && this.micStream.getAudioTracks().some(t => t.readyState === 'ended')) {
+        this.micStream = null;
+      }
+      this._fireDone(this._mimeType || 'audio/webm');
     }
   }
 
