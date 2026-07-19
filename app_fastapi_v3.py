@@ -484,6 +484,10 @@ def clean_for_tts(text: str) -> str:
         .replace("的確", "迪確")
         .replace("怎麼樣", "怎么樣")
         .replace("怎麼", "怎么")
+        # 「長」在這兩個詞裡是破音字，要唸 zhǎng（掌）不是 cháng（常），
+        # Edge TTS 不支援 phoneme，用同音字「掌」騙出正確發音。
+        .replace("成長", "成掌")
+        .replace("長輩", "掌輩")
     )
     return text
 
