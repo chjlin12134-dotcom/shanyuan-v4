@@ -814,6 +814,18 @@ async def chat(request: Request):
                         full_response += text
                         yield "data: " + json.dumps({"type": "token", "text": text}, ensure_ascii=False) + "\n\n"
 
+            elif buddhist_mode and is_quote_request(user_text) and q_match is None:
+                # 使用者明確要求一句跟他情況有關的大師／佛經話語，但系統剛查過語料庫，
+                # 沒有查到把握夠高的內容。這是一個範圍很窄、能明確判定的情境，
+                # 真實測試證實就算 prompt 裡已經附上這句標準回應要模型照講，
+                # 模型還是常常自己另外發揮、講一句沒有真的引用、卻也沒有清楚交代
+                # 「沒把握」這件事的模糊話——不算違反道歉／編造出處的硬規則，
+                # 但沒有達到使用者要的效果。這裡乾脆不呼叫 LLM，直接用使用者
+                # 核定過的標準回應，保證每次都是同一句話，也省了一次生成的延遲。
+                print("[chat][buddhist] 主動要求引言但查無把握，直接用標準誠實回應（不呼叫 LLM）")
+                full_response = NO_CONFIDENT_SOURCE_REPLY
+                yield "data: " + json.dumps({"type": "token", "text": full_response}, ensure_ascii=False) + "\n\n"
+
             elif buddhist_mode:
                 # 佛法討論模式：這裡是「道歉語／編造出處」問題實際發生的地方，
                 # 真實測試證實光靠 prompt 文字規則沒辦法讓模型 100% 遵守。
