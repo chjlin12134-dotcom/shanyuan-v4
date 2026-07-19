@@ -92,11 +92,23 @@ def get_corpus() -> pd.DataFrame:
 
 APOLOGY_TERMS = ["對不起", "抱歉"]
 
+# 使用者核定的「沒把握時」標準誠實回應——不管是被追問出處查無所獲、
+# 還是使用者主動要求一句話卻查不到夠貼近的內容，只要沒把握，
+# 一律用同一套講法，不即興編一個聽起來完整但沒查證過的答案。
+NO_CONFIDENT_SOURCE_REPLY = (
+    "我這一刻不能完全確定大師或佛經的原話怎麼說，"
+    "但是我從大師這邊熏習所受到的啟發已融匯在我的生活中，"
+    "因此如您願意，我也很樂意跟你分享我自己學到的觀點。"
+)
+
 def _find_bracket_citations(text: str) -> list[str]:
     return re.findall(r"《([^》]{1,30})》", text)
 
-def validate_buddhist_reply(text: str, verified: dict | None) -> str | None:
+def validate_buddhist_reply(text: str, verified_sources: list[str]) -> str | None:
     """檢查善緣這一輪的回覆有沒有違反「不道歉、不編造出處」的硬規則。
+    `verified_sources` 是這一輪所有「系統真的查證過」的出處字串（可能同時來自
+    「事後被追問查證」的 verify_source() 和「主動要求引言」的 _best_corpus_match()
+    兩條路徑，兩者都算數，只要有一個對得上就放行）。
     回傳違規描述字串；None 代表通過檢查。
     這是程式碼層級的最後一道防線——prompt 指令對 LLM 只是機率性的建議，
     真實測試證實光靠文字規則沒辦法讓模型 100% 遵守，需要用程式碼強制擋下來。"""
@@ -105,11 +117,10 @@ def validate_buddhist_reply(text: str, verified: dict | None) -> str | None:
     citations = _find_bracket_citations(text)
     if not citations:
         return None
-    verified_source = (verified or {}).get("出處", "")
     for c in citations:
         # 只有這輪系統真的查證到的出處，才准許在回覆裡用《書名》的形式點名，
         # 其他一律視為未經查證、可能是幻覺出來的出處。
-        if verified_source and (c in verified_source or verified_source in c):
+        if any(vs and (c in vs or vs in c) for vs in verified_sources):
             continue
         return f"引用了未經查證的出處《{c}》"
     return None
@@ -185,14 +196,16 @@ def is_source_check_question(text: str) -> bool:
 # 25 落在中間、偏保守——寧可少報一點出處（誠實說是自己的理解），也不要對沒有真正引用的內容自信地報錯出處。
 SOURCE_CHECK_THRESHOLD = 25
 
-def verify_source(corpus: pd.DataFrame, prior_reply: str) -> dict | None:
-    """針對善緣上一輪實際講的話，重新查一次語料庫，回傳最相關的那筆（含比對分數），
-    分數不夠高就當作查無確切出處，不能讓模型自己憑印象聲稱出處。"""
-    if corpus.empty or not prior_reply:
-        return None
-    q_tokens = Counter(tokenize(prior_reply))
+def _best_corpus_match(corpus: pd.DataFrame, query_text: str) -> tuple[int, dict | None]:
+    """通用比對：給一段查詢文字，回傳語料庫裡分數最高的那一筆和分數。
+    `verify_source()`（查證善緣上一輪實際講的話）和「使用者主動要求一句相關的話」
+    這兩種情境，本質上都是同一個「這段文字跟語料庫哪一筆最貼近、貼近到什麼程度」的問題，
+    共用同一套比對邏輯。"""
+    if corpus.empty or not query_text:
+        return 0, None
+    q_tokens = Counter(tokenize(query_text))
     if not q_tokens:
-        return None
+        return 0, None
     best_score, best_idx = 0, None
     for idx, row in corpus.iterrows():
         doc = f"{row.get('標題','')} {row.get('大師金句','')} {row.get('具體故事','')} {row.get('善緣陪伴語','')}"
@@ -200,9 +213,28 @@ def verify_source(corpus: pd.DataFrame, prior_reply: str) -> dict | None:
         score = sum(min(q_tokens[t], d_tokens[t]) for t in q_tokens if t in d_tokens)
         if score > best_score:
             best_score, best_idx = score, idx
-    if best_idx is None or best_score < SOURCE_CHECK_THRESHOLD:
+    if best_idx is None:
+        return best_score, None
+    return best_score, corpus.iloc[best_idx].to_dict()
+
+def verify_source(corpus: pd.DataFrame, prior_reply: str) -> dict | None:
+    """針對善緣上一輪實際講的話，重新查一次語料庫，回傳最相關的那筆（含比對分數），
+    分數不夠高就當作查無確切出處，不能讓模型自己憑印象聲稱出處。"""
+    score, row = _best_corpus_match(corpus, prior_reply)
+    if row is None or score < SOURCE_CHECK_THRESHOLD:
         return None
-    return corpus.iloc[best_idx].to_dict()
+    return row
+
+QUOTE_REQUEST_TERMS = [
+    "大師的話", "大師說過", "大師的原話", "佛經", "經文", "有沒有相關的話",
+    "給我一句", "大師怎麼說", "有沒有大師", "有沒有經典", "有沒有相關的開示",
+    "跟我的情況有關的話", "有沒有一句話", "有沒有什麼話", "有沒有教導",
+]
+
+def is_quote_request(text: str) -> bool:
+    """判斷使用者是不是主動要求一句跟他情況有關、大師或佛經的具體話語
+    （不是在追問善緣剛才講的那句話出處，是主動點名想要一句「新的」引言）。"""
+    return any(w in text for w in QUOTE_REQUEST_TERMS)
 
 def format_retrieved(items: list[dict], buddhist_mode: bool = False) -> str:
     if not items:
@@ -666,6 +698,7 @@ async def chat(request: Request):
     # 每一輪都用善緣上一輪實際講的內容重新查一次語料庫，
     # 讓模型每一輪都有真實的查證結果可以依據，沒有機會空手编造。
     source_check_instruction = ""
+    verified: dict | None = None
     if buddhist_mode:
         prior_assistant = next((m["content"] for m in reversed(messages) if m["role"] == "assistant"), "")
         verified = verify_source(corpus, prior_assistant) if prior_assistant else None
@@ -691,6 +724,35 @@ async def chat(request: Request):
                 "這不是你做錯了什麼要道歉，是誠實告訴對方這句話的性質，講完直接接回對話即可。\n"
             )
 
+    # 上面的 source_check_instruction 是「事後被追問」的被動情境；
+    # 這裡是使用者「主動要求」給他一句跟他情況有關、大師或佛經的具體話語，
+    # 是可以正面滿足他期待的機會——如果語料庫裡真的查得到夠貼近的內容，
+    # 就鼓勵善緣自然地引用出來；查不到的話，不要為了滿足期待硬套一句不貼切
+    # 或自己編的話，改用使用者核定過的標準誠實回應。
+    quote_request_instruction = ""
+    q_match: dict | None = None  # 只在分數夠高（真的查到）時才會賦值，供下面驗證白名單使用
+    if buddhist_mode and is_quote_request(user_text):
+        q_score, q_best = _best_corpus_match(corpus, recent_text)
+        if q_best and q_score >= SOURCE_CHECK_THRESHOLD:
+            q_match = q_best
+            q_source = q_match.get("出處", "")
+            q_quote = q_match.get("大師金句", "")[:80]
+            quote_request_instruction = (
+                "\n\n---\n"
+                "【本輪提示：使用者要求具體的話語】使用者想要一句真的跟他的情況有關、大師或佛經的原話。"
+                f"系統剛查過語料庫，找到一筆把握夠高、貼近他情況的內容：出處「{q_source}」，原句「{q_quote}」。"
+                f"請自然地把這句話帶進你的回應裡，明確講出處「{q_source}」，讓使用者感覺到你是真的找到了適合他的話，不要含糊帶過。\n"
+            )
+        else:
+            quote_request_instruction = (
+                "\n\n---\n"
+                "【本輪提示：使用者要求具體的話語】使用者想要一句真的跟他的情況有關、大師或佛經的原話，"
+                "但系統剛查過語料庫，沒有查到把握夠高、真的貼近他這個具體情況的原句。"
+                "這種時候不要為了滿足他的期待，就硬套一句不夠貼切、或自己編的話。"
+                "請照這個方式誠實回應（語氣可以自然調整，但意思要一致，不要加道歉語）："
+                f"「{NO_CONFIDENT_SOURCE_REPLY}」\n"
+            )
+
     current_events_instruction = ""
     if current_events_mode:
         current_events_instruction = (
@@ -702,7 +764,11 @@ async def chat(request: Request):
             "重點放在事件帶給使用者的感受、困惑、價值衝突或生命經驗，不要變成新聞分析機。\n"
         )
 
-    full_system = SYSTEM_PROMPT + retrieval_block + farewell_instruction + buddhist_instruction + source_check_instruction + current_events_instruction
+    full_system = SYSTEM_PROMPT + retrieval_block + farewell_instruction + buddhist_instruction + source_check_instruction + quote_request_instruction + current_events_instruction
+    # 這一輪所有「系統真的查證過」的出處，供 validate_buddhist_reply() 當白名單：
+    # 不管善緣是在回答「被追問出處」還是「主動要求引言」，只要引用的書名對得上
+    # 其中任何一筆，就代表這是有憑有據的引用，不是幻覺。
+    verified_sources = [v.get("出處", "") for v in (verified, q_match) if v]
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
     groq_key      = os.environ.get("GROQ_API_KEY", "")
     go_key        = os.environ.get("OPENCODE_GO_API_KEY", "")
@@ -757,7 +823,7 @@ async def chat(request: Request):
                 # 不受影響；文字模式會從「一個字一個字跳出來」變成「整段一次出現」），
                 # 也不能讓編造出處或連續道歉的內容真的送到使用者面前。
                 full_response = await _collect_llm_response(full_system)
-                violation = validate_buddhist_reply(full_response, verified) if full_response.strip() else None
+                violation = validate_buddhist_reply(full_response, verified_sources) if full_response.strip() else None
                 if violation:
                     print(f"[chat][buddhist] 第一次回覆違規（{violation}），重新生成一次")
                     corrected_system = full_system + (
@@ -766,13 +832,10 @@ async def chat(request: Request):
                         "也絕對不要點名任何沒有在上面『出處查證』或『參考語料』裡出現過的書名、經名、出處。\n"
                     )
                     full_response = await _collect_llm_response(corrected_system)
-                    violation = validate_buddhist_reply(full_response, verified) if full_response.strip() else None
+                    violation = validate_buddhist_reply(full_response, verified_sources) if full_response.strip() else None
                 if violation:
                     print(f"[chat][buddhist] 第二次仍違規（{violation}），改用保底誠實版本")
-                    full_response = (
-                        "嗯，這是我自己對佛法的理解和體會，不是逐字引用大師的原話，也沒有確切的出處。"
-                        "你想多聊聊你現在的感受嗎？"
-                    )
+                    full_response = NO_CONFIDENT_SOURCE_REPLY
                 if full_response:
                     yield "data: " + json.dumps({"type": "token", "text": full_response}, ensure_ascii=False) + "\n\n"
 
