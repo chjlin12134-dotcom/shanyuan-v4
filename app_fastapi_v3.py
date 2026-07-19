@@ -90,6 +90,30 @@ def get_corpus() -> pd.DataFrame:
         _corpus = pd.read_csv(CORPUS_CSV).fillna("")
     return _corpus
 
+APOLOGY_TERMS = ["對不起", "抱歉"]
+
+def _find_bracket_citations(text: str) -> list[str]:
+    return re.findall(r"《([^》]{1,30})》", text)
+
+def validate_buddhist_reply(text: str, verified: dict | None) -> str | None:
+    """檢查善緣這一輪的回覆有沒有違反「不道歉、不編造出處」的硬規則。
+    回傳違規描述字串；None 代表通過檢查。
+    這是程式碼層級的最後一道防線——prompt 指令對 LLM 只是機率性的建議，
+    真實測試證實光靠文字規則沒辦法讓模型 100% 遵守，需要用程式碼強制擋下來。"""
+    if any(w in text for w in APOLOGY_TERMS):
+        return "含道歉語"
+    citations = _find_bracket_citations(text)
+    if not citations:
+        return None
+    verified_source = (verified or {}).get("出處", "")
+    for c in citations:
+        # 只有這輪系統真的查證到的出處，才准許在回覆裡用《書名》的形式點名，
+        # 其他一律視為未經查證、可能是幻覺出來的出處。
+        if verified_source and (c in verified_source or verified_source in c):
+            continue
+        return f"引用了未經查證的出處《{c}》"
+    return None
+
 def load_system_prompt() -> str:
     if not PROMPT_MD.exists():
         return "你是善緣，一位溫暖的陀伴者。"
@@ -683,6 +707,31 @@ async def chat(request: Request):
     groq_key      = os.environ.get("GROQ_API_KEY", "")
     go_key        = os.environ.get("OPENCODE_GO_API_KEY", "")
 
+    async def _collect_llm_response(system: str) -> str:
+        """非串流版本：跑一次模型選擇 cascade（premium／groq／go 備援），
+        把完整回覆收集成一個字串後回傳，不逐 token yield 給前端。
+        給需要「先驗證內容、再決定要不要送到使用者面前」的情境用
+        （目前只有 buddhist_mode 的道歉語／未經查證出處檢查）。"""
+        text = ""
+        if CHAT_MODEL_TIER == "premium":
+            client = anthropic.Anthropic(api_key=anthropic_key)
+            with client.messages.stream(
+                model=PREMIUM_MODEL, max_tokens=150, system=system, messages=messages,
+            ) as stream:
+                for chunk in stream.text_stream:
+                    text += chunk
+        elif groq_key:
+            try:
+                async for delta in _stream_groq(groq_key, system, messages):
+                    text += delta
+            except RuntimeError:
+                async for delta in _stream_go(go_key, system, messages):
+                    text += delta
+        else:
+            async for delta in _stream_go(go_key, system, messages):
+                text += delta
+        return text
+
     async def generate():
         full_response = ""
         try:
@@ -698,6 +747,34 @@ async def chat(request: Request):
                     for text in stream.text_stream:
                         full_response += text
                         yield "data: " + json.dumps({"type": "token", "text": text}, ensure_ascii=False) + "\n\n"
+
+            elif buddhist_mode:
+                # 佛法討論模式：這裡是「道歉語／編造出處」問題實際發生的地方，
+                # 真實測試證實光靠 prompt 文字規則沒辦法讓模型 100% 遵守。
+                # 改成先在後端把完整回覆收集起來、跑 validate_buddhist_reply() 驗證過，
+                # 不合格就用更嚴格的糾正提示重新生成一次，兩次都不合格就換保底的
+                # 誠實版本——寧可犧牲一點逐字即時感（語音模式本來就是整段合成才播放，
+                # 不受影響；文字模式會從「一個字一個字跳出來」變成「整段一次出現」），
+                # 也不能讓編造出處或連續道歉的內容真的送到使用者面前。
+                full_response = await _collect_llm_response(full_system)
+                violation = validate_buddhist_reply(full_response, verified) if full_response.strip() else None
+                if violation:
+                    print(f"[chat][buddhist] 第一次回覆違規（{violation}），重新生成一次")
+                    corrected_system = full_system + (
+                        "\n\n---\n【系統糾正】你剛剛的草稿回覆有問題："
+                        f"{violation}。請重新回答一次：這次絕對不要出現「對不起」「抱歉」這類道歉語，"
+                        "也絕對不要點名任何沒有在上面『出處查證』或『參考語料』裡出現過的書名、經名、出處。\n"
+                    )
+                    full_response = await _collect_llm_response(corrected_system)
+                    violation = validate_buddhist_reply(full_response, verified) if full_response.strip() else None
+                if violation:
+                    print(f"[chat][buddhist] 第二次仍違規（{violation}），改用保底誠實版本")
+                    full_response = (
+                        "嗯，這是我自己對佛法的理解和體會，不是逐字引用大師的原話，也沒有確切的出處。"
+                        "你想多聊聊你現在的感受嗎？"
+                    )
+                if full_response:
+                    yield "data: " + json.dumps({"type": "token", "text": full_response}, ensure_ascii=False) + "\n\n"
 
             elif CHAT_MODEL_TIER == "premium":
                 print(f"[chat] premium -> {PREMIUM_MODEL}")
