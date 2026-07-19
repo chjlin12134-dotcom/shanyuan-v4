@@ -53,7 +53,9 @@ GOOGLE_TTS_URL = "https://texttospeech.googleapis.com/v1/text:synthesize"
 EDGE_TTS_VOICES = [
     {"id": "EDGE-F2", "name": "溫和女聲",   "voice": "zh-TW-HsiaoChenNeural", "rate": "-8%", "pitch": "-10Hz"},
     {"id": "EDGE-F3", "name": "輕柔女聲",   "voice": "zh-CN-XiaoxiaoNeural",  "rate": "-8%",  "pitch": "-8Hz"},
-    {"id": "EDGE-F4", "name": "中音女聲",   "voice": "zh-CN-XiaochenNeural",  "rate": "-8%",  "pitch": "-20Hz"},
+    # 2026-07-19：zh-CN-XiaochenNeural 在 Microsoft 那邊持續失敗（直接對 edge_tts 測試
+    # 連續 100% 失敗，不是我們這端或網路的暫時性問題），換成同樣測過目前正常的 zh-CN-XiaoyiNeural。
+    {"id": "EDGE-F4", "name": "中音女聲",   "voice": "zh-CN-XiaoyiNeural",  "rate": "-8%",  "pitch": "-20Hz"},
     {"id": "EDGE-M1", "name": "自然男聲",   "voice": "zh-TW-YunJheNeural",   "rate": "+0%",  "pitch": "-5Hz"},
     {"id": "EDGE-M2", "name": "溫和男聲",   "voice": "zh-TW-YunJheNeural",   "rate": "-15%", "pitch": "-18Hz"},
     {"id": "EDGE-M3", "name": "渾厚男聲",   "voice": "zh-CN-YunjianNeural",  "rate": "-12%", "pitch": "-15Hz"},
@@ -559,8 +561,12 @@ async def tts(request: Request):
         FEMALE_VOICES = ["zh-TW-HsiaoChenNeural", "zh-CN-XiaoxiaoNeural"]
         gender_pool = MALE_VOICES if voice_cfg["id"].startswith("EDGE-M") else FEMALE_VOICES
         SAME_GENDER_FALLBACK = next((v for v in gender_pool if v != voice_cfg["voice"]), gender_pool[0])
-        # 先重試同一聲線一次：edge_tts 的 "No audio received" 多半是暫時性網路問題，重試就會過
-        voices_to_try = [voice_cfg["voice"], voice_cfg["voice"], SAME_GENDER_FALLBACK]
+        # 2026-07-19：原本這裡會把同一個聲線試兩次才 fallback（假設 "No audio received"
+        # 多半是暫時性網路問題）。但實測證實某些聲線是 Microsoft 那邊持續性壞掉
+        # （同一聲線連續多次呼叫 100% 失敗，不是網路問題），重試同一個壞掉的聲線
+        # 只是白白浪費一次網路來回的時間，讓每一輪回應都變慢。改成只試一次原聲線，
+        # 失敗就直接换 fallback，暫時性問題留給 fallback 這一次順便補上就好。
+        voices_to_try = [voice_cfg["voice"], SAME_GENDER_FALLBACK]
         for i, attempt_voice in enumerate(voices_to_try):
             try:
                 communicate = edge_tts.Communicate(
