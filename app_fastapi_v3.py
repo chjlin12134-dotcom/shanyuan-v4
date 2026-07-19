@@ -632,24 +632,37 @@ async def chat(request: Request):
             "結尾仍把空間還給使用者，用一句短問題邀請他繼續說。\n"
         )
 
+    # 原本只在 is_source_check_question(user_text) 命中關鍵字時才查證，
+    # 但真實對話（尤其語音辨識後的文字，常有錯字、換句話說、跟原本關鍵字表對不上）
+    # 證實這個關鍵字表會漏判：使用者換一種問法、或 STT 把字認錯，
+    # 查證就完全不會被觸發，模型會在沒有任何查證結果可用的情況下，
+    # 自己「補」出一個聽起來合理但其實是編的書名（例如《人間佛教》系列、《佛光菜根譚》），
+    # 而且會一路編下去、越編越具體。
+    # 改成只要在 buddhist_mode，不管使用者這輪問法有沒有命中關鍵字，
+    # 每一輪都用善緣上一輪實際講的內容重新查一次語料庫，
+    # 讓模型每一輪都有真實的查證結果可以依據，沒有機會空手编造。
     source_check_instruction = ""
-    if buddhist_mode and is_source_check_question(user_text):
+    if buddhist_mode:
         prior_assistant = next((m["content"] for m in reversed(messages) if m["role"] == "assistant"), "")
-        verified = verify_source(corpus, prior_assistant)
+        verified = verify_source(corpus, prior_assistant) if prior_assistant else None
+        asked_directly = "使用者在追問你上一句話的出處，" if is_source_check_question(user_text) else ""
         if verified:
             v_source = verified.get("出處", "")
             v_quote = verified.get("大師金句", "")[:80]
             source_check_instruction = (
                 "\n\n---\n"
-                "【本輪提示：出處查證】使用者在追問你上一句話的出處，系統剛用你上一輪實際講的內容重新比對了語料庫，"
+                f"【本輪提示：出處查證】{asked_directly}系統剛用你上一輪實際講的內容重新比對了語料庫，"
                 f"查到高度相關的一筆：出處「{v_source}」，原句「{v_quote}」。"
-                f"請照這個查證結果回答，明確講出「{v_source}」這個出處，不要換一個模糊的說法。\n"
+                f"如果要講出處，只能講這個查到的「{v_source}」，不要換一個沒有查證過的說法或書名。\n"
             )
         else:
             source_check_instruction = (
                 "\n\n---\n"
-                "【本輪提示：出處查證】使用者在追問你上一句話的出處，系統剛用你上一輪實際講的內容重新比對了語料庫，"
-                "沒有查到夠相關、可以精準引用的出處。請誠實告訴使用者：這是你自己對大師思想的理解或歸納，不是逐字引用某一本書。"
+                f"【本輪提示：出處查證】{asked_directly}系統剛用你上一輪實際講的內容重新比對了語料庫，"
+                "沒有查到夠相關、可以精準引用的出處。接下來如果要提到這件事，只能誠實告訴使用者：這是你自己對大師思想的理解或歸納，不是逐字引用某一本書。"
+                "絕對不要為了讓回答聽起來更完整、更有根據，就另外編一個書名、經名或系列名稱"
+                "（例如「人間佛教系列」「佛光菜根譚」之類——除非它就是上面『參考語料』裡真的列出來的出處，否則不要講出任何具體書名），"
+                "沒有查到就是沒有查到，不要生出一個聽起來合理但其實是編的出處，也不要一輪一輪把細節越編越具體。"
                 "用坦然、平靜的語氣講清楚就好，不要說「不記得」「記錯了」，也不要說「抱歉」「對此我感到抱歉」「未能提供更精確的說明」這類道歉語——"
                 "這不是你做錯了什麼要道歉，是誠實告訴對方這句話的性質，講完直接接回對話即可。\n"
             )
