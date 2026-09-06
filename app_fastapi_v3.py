@@ -547,6 +547,32 @@ def clean_transcript_for_voice_input(text: str) -> str:
     if len(compact) <= 1:
         print(f"[STT filtered too-short] {transcript[:120]}")
         return ""
+
+    # Whisper 幻聽特徵：對靜默/背景音生成「完整句子重複」。
+    # 偵測方式：把 transcript 從正中間切開，前半去空白後若等於後半，視為幻聽。
+    # 例：「我先把照片放在一起。我先把照片放在一起。」
+    stripped = transcript.strip("。，、！？!?. ")
+    mid = len(stripped) // 2
+    if mid >= 4:
+        first_half = re.sub(r"\s+", "", stripped[:mid]).strip("。，、！？!?. ")
+        second_half = re.sub(r"\s+", "", stripped[mid:]).strip("。，、！？!?. ")
+        if first_half and first_half == second_half:
+            print(f"[STT filtered repeated-sentence] {transcript[:120]}")
+            return ""
+
+    # Whisper 對無語音片段常生成的繁體/簡體中文固定幻聽句
+    WHISPER_SILENCE_PHRASES = [
+        "謝謝", "謝謝觀看", "謝謝你", "謝謝大家",
+        "請繼續", "好的", "對", "嗯", "嗯嗯",
+        "我不知道", "不知道", "我也不知道",
+        "等一下", "稍等", "稍等一下",
+        "沒有", "沒有啊", "沒事", "沒事啊",
+        "是的", "是啊", "對啊", "對對",
+    ]
+    if transcript.strip("。，、！？!?. ") in WHISPER_SILENCE_PHRASES:
+        print(f"[STT filtered silence-phrase] {transcript[:120]}")
+        return ""
+
     return transcript
 
 def is_low_confidence_stt(result: dict) -> bool:
@@ -561,7 +587,7 @@ def is_low_confidence_stt(result: dict) -> bool:
     if not probs:
         return False
     avg_no_speech = sum(probs) / len(probs)
-    if avg_no_speech >= 0.55:
+    if avg_no_speech >= 0.45:  # 從 0.55 降至 0.45，更積極過濾靜默段幻聽
         print(f"[STT filtered no-speech-prob] {avg_no_speech:.2f}")
         return True
     return False
