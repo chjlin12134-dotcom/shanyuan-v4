@@ -41,8 +41,9 @@ GO_MODEL    = "deepseek-v4-flash"
 GO_BASE_URL = "https://api.deepseek.com/v1/chat/completions"
 
 FAREWELL_WORDS = [
-    # 前端確認後統一送「再見」觸發道別；後端只需認這一個詞
-    "再見",
+    # 前端現在直接送原文，不再替換成「再見」，
+    # 後端需要自己辨識 hard farewell 詞彙以觸發道別/祈福流程。
+    "再見", "拜拜", "掰掰", "bye", "goodbye", "結束對話",
 ]
 
 GOOGLE_TTS_URL = "https://texttospeech.googleapis.com/v1/text:synthesize"

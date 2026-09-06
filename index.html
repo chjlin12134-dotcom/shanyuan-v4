@@ -1338,7 +1338,8 @@ let pendingBuddhistQuestion = '';
 
 // 明確道別詞：絕對不會誤觸，直接送後端觸發道別（不確認）
 const HARD_FAREWELL_WORDS = [
-  '再見', '拜拜', '掰掰', 'bye', 'goodbye', '結束對話', '結束',
+  '再見', '拜拜', '掰掰', 'bye', 'goodbye', '結束對話',
+  // 注意：「結束」單字已移除，因為語境太廣容易誤觸（如「結束工作」「結束這件事」）
 ];
 
 // 軟道別詞：可能誤觸，先問「你想暫時先休息嗎？」確認後才送道別
@@ -2092,7 +2093,9 @@ async function sendText() {
   input.value = ''; input.style.height = 'auto';
   lastInputMode = 'text';
   const farewellType = detectFarewellType(text);
-  await sendMessage(farewellType === 'hard' ? '再見' : text);
+  // 不再把使用者的話替換成「再見」，保留原文送出
+  // 後端的 is_farewell() 會自己辨識道別詞、觸發祈福流程
+  await sendMessage(text);
 }
 
 function waitForStreamEnd(timeout = 15000) {
@@ -2682,7 +2685,9 @@ async function handleRecordingDone(mimeType, mveBlob) {
       }
 
       if (voiceConvoActive) setConvoStatus('善緣回應中…', false);
-      await sendMessage(farewellType === 'hard' ? '再見' : data.transcript, true);
+      // 不再把使用者的話替換成「再見」，保留原文送出
+      // 後端的 is_farewell() 會自己辨識道別詞、觸發祈福流程
+      await sendMessage(data.transcript, true);
       if (voiceStopRequested) return;
       if (voiceConvoActive && (!ttsAvailable || ttsMuted)) {
         setConvoStatus('聆聽中…', true);
