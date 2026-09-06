@@ -312,22 +312,37 @@ BLESSING_BLACKLIST = [
     "不曾想要造福", "沒有廣結", "怕近處的菩薩",
 ]
 
+# 祈福禮通用備用句：當對話內容跟語料庫語意距離太遠、無法找到貼切的金句時使用，
+# 避免隨機抽樣抽到驢唇不對馬嘴的內容。這一句本身足夠普適，放在任何對話後都不突兀。
+BLESSING_GENERIC_FALLBACK = {
+    "大師金句": "人生的路，有時走得快，有時走得慢，最重要的是走得真實。",
+    "標題": "人間處世",
+    "出處": "星雲大師語錄",
+}
+BLESSING_RELEVANCE_THRESHOLD = 3  # retrieve score 低於此值視為語意不貼切
+
 def get_blessing(corpus: pd.DataFrame, conversation_text: str) -> dict | None:
     if corpus.empty:
         return None
+    # 先查最佳匹配分數，決定要用語意比對結果還是通用備用句
+    best_score, best_match = _best_corpus_match(corpus, conversation_text)
+    if best_score < BLESSING_RELEVANCE_THRESHOLD:
+        # 對話內容跟語料庫語意距離太遠（常見於：閒聊、技術討論、簡短道別）
+        # 直接用通用備用句，不隨機抽樣，避免出現不相關金句
+        print(f"[blessing] score={best_score} < threshold={BLESSING_RELEVANCE_THRESHOLD}, 改用通用備用句")
+        return BLESSING_GENERIC_FALLBACK
     items = retrieve(corpus, conversation_text, k=5)
     for item in items:
         combined = f"{item.get('大師金句','')}{item.get('善緣陪伴語','')}{item.get('具體故事','')}"
         if not any(w in combined for w in BLESSING_BLACKLIST):
             return item
+    # 語意相關但 top-5 都在黑名單，才隨機抽（此情況極少）
     for _ in range(30):
         candidate = corpus.sample(1).iloc[0]
         combined = f"{candidate.get('大師金句','')}{candidate.get('善緣陪伴語','')}{candidate.get('具體故事','')}"
         if not any(w in combined for w in BLESSING_BLACKLIST):
             return candidate.to_dict()
-    if items:
-        return items[0]
-    return corpus.sample(1).iloc[0].to_dict()
+    return BLESSING_GENERIC_FALLBACK
 
 
 async def _stream_groq(groq_key: str, system: str, messages: list[dict]):
