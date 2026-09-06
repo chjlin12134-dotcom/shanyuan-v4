@@ -1,6 +1,6 @@
 """
 shan yuan v3 - FastAPI speed-optimized
-Groq primary, Go API fallback on 429
+Groq primary, DeepSeek fallback on 429
 v3 新增：插話功能（TTS 播放中可插話）
 """
 
@@ -35,10 +35,10 @@ BLESSING_MODEL  = os.environ.get("BLESSING_MODEL", "claude-haiku-4-5-20251001")
 PREMIUM_MODEL   = "claude-sonnet-4-5"
 
 GROQ_CHAT_URL   = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_CHAT_MODEL = "llama-3.3-70b-versatile"
+GROQ_CHAT_MODEL = "openai/gpt-oss-120b"
 
 GO_MODEL    = "deepseek-v4-flash"
-GO_BASE_URL = "https://opencode.ai/zen/go/v1/chat/completions"
+GO_BASE_URL = "https://api.deepseek.com/v1/chat/completions"
 
 FAREWELL_WORDS = [
     # 前端確認後統一送「再見」觸發道別；後端只需認這一個詞
@@ -330,39 +330,50 @@ def get_blessing(corpus: pd.DataFrame, conversation_text: str) -> dict | None:
 
 
 async def _stream_groq(groq_key: str, system: str, messages: list[dict]):
-    """Groq async generator. Yields tokens, or raises RuntimeError('429') on rate limit."""
+    """Groq async generator. Yields tokens, or raises RuntimeError on
+    429/404/410/5xx/timeout so caller can fallback to DeepSeek API."""
     print(f"[chat] groq -> {GROQ_CHAT_MODEL}")
     payload = {
         "model": GROQ_CHAT_MODEL,
         "stream": True,
-        "max_tokens": 150,
+        "max_tokens": 1024,
         "messages": [{"role": "system", "content": system}] + messages,
     }
-    async with get_http_client().stream(
-        "POST", GROQ_CHAT_URL,
-        headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-        json=payload,
-    ) as resp:
-        if resp.status_code == 429:
-            print("[chat] groq 429 -> fallback to Go API")
-            raise RuntimeError("429")
-        resp.raise_for_status()
-        async for line in resp.aiter_lines():
-            if not line or line == "data: [DONE]":
-                continue
-            if line.startswith("data: "):
-                try:
-                    chunk = json.loads(line[6:])
-                    delta = chunk["choices"][0]["delta"].get("content", "")
-                    if delta:
-                        yield delta
-                except Exception:
+    try:
+        async with get_http_client().stream(
+            "POST", GROQ_CHAT_URL,
+            headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+            json=payload,
+        ) as resp:
+            if resp.status_code == 429:
+                print("[chat] groq 429 -> fallback to DeepSeek")
+                raise RuntimeError("429")
+            if resp.status_code in (404, 410):
+                print(f"[chat] groq {resp.status_code} -> model unavailable, fallback to DeepSeek")
+                raise RuntimeError(str(resp.status_code))
+            if resp.status_code >= 500:
+                print(f"[chat] groq {resp.status_code} -> server error, fallback to DeepSeek")
+                raise RuntimeError(str(resp.status_code))
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line or line == "data: [DONE]":
                     continue
+                if line.startswith("data: "):
+                    try:
+                        chunk = json.loads(line[6:])
+                        delta = chunk["choices"][0]["delta"].get("content", "")
+                        if delta:
+                            yield delta
+                    except Exception:
+                        continue
+    except httpx.TimeoutException as e:
+        print(f"[chat] groq timeout -> fallback to DeepSeek: {e}")
+        raise RuntimeError("timeout") from e
 
 
 async def _stream_go(go_key: str, system: str, messages: list[dict]):
-    """OpenCode Go API async generator."""
-    print(f"[chat] go api -> {GO_MODEL}")
+    """DeepSeek API async generator."""
+    print(f"[chat] deepseek -> {GO_MODEL}")
     payload = {
         "model": GO_MODEL,
         "stream": True,
@@ -816,7 +827,7 @@ async def chat(request: Request):
     verified_sources = [v.get("出處", "") for v in (verified, q_match) if v]
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
     groq_key      = os.environ.get("GROQ_API_KEY", "")
-    go_key        = os.environ.get("OPENCODE_GO_API_KEY", "")
+    go_key        = os.environ.get("DEEPSEEK_API_KEY", "")
 
     async def _collect_llm_response(system: str) -> str:
         """非串流版本：跑一次模型選擇 cascade（premium／groq／go 備援），
@@ -920,7 +931,7 @@ async def chat(request: Request):
                         full_response += delta
                         yield "data: " + json.dumps({"type": "token", "text": delta}, ensure_ascii=False) + "\n\n"
                 except RuntimeError:
-                    # 429 fallback to Go
+                    # 429 fallback to DeepSeek
                     async for delta in _stream_go(go_key, full_system, messages):
                         full_response += delta
                         yield "data: " + json.dumps({"type": "token", "text": delta}, ensure_ascii=False) + "\n\n"

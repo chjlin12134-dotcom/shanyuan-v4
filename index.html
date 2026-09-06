@@ -173,6 +173,7 @@ header {
   .header-mobile-deco { display: flex; }
   .header-info-btn-mobile { display: flex; }
   .header-main > .btn-info { display: none; }
+  .btn-info-center { display: none; }
 }
 
 .info-bar {
@@ -215,12 +216,22 @@ header {
   background: linear-gradient(90deg, transparent, rgba(170,155,130,0.4), transparent);
 }
 .info-section strong { color: #6a5a40; display: block; margin-bottom: 4px; font-size: 11.5px; letter-spacing: 0.08em; }
+.info-title-main { font-size: 14px !important; letter-spacing: 0.1em; margin-bottom: 6px !important; }
+.info-title-sub { font-size: 11.5px; font-weight: 500; color: #5a4a38; margin-bottom: 2px; }
+.btn-info-close {
+  background: none; border: 1px solid rgba(150,130,100,0.3);
+  border-radius: 10px; color: #8a7a60; font-size: 12px;
+  padding: 3px 16px; cursor: pointer;
+  font-family: 'Noto Serif TC', serif; letter-spacing: 0.05em;
+  transition: all 0.2s;
+}
+.btn-info-close:hover { background: rgba(150,130,100,0.08); }
 .info-icon {
   display: inline-block;
-  font-size: 2.5em;
+  font-size: 1.6em;
   line-height: 1;
   vertical-align: middle;
-  margin: -0.35em 0.15em -0.35em -0.05em;
+  margin: -0.2em 0.1em -0.2em -0.02em;
 }
 
 .btn-info {
@@ -237,8 +248,45 @@ header {
   font-family: 'Noto Serif TC', serif;
   letter-spacing: 0.05em;
   transition: all 0.2s;
+  display: none;
 }
 .btn-info:hover { background: rgba(150,130,100,0.08); }
+
+.btn-info-center {
+  display: flex;
+  justify-content: center;
+  padding: 0 0 8px;
+}
+.btn-info-center .btn-info {
+  position: static;
+  transform: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: linear-gradient(135deg, rgba(255,240,210,0.85), rgba(255,230,190,0.8));
+  border: 1px solid rgba(180,150,80,0.4);
+  border-radius: 16px;
+  color: #6a5030;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 5px 18px 5px 12px;
+  box-shadow: 0 2px 12px rgba(180,140,60,0.15);
+  animation: btn-info-pulse 3s ease-in-out infinite;
+}
+.btn-info-center .btn-info:hover {
+  background: linear-gradient(135deg, rgba(255,235,200,0.95), rgba(255,225,180,0.9));
+  box-shadow: 0 3px 16px rgba(180,140,60,0.25);
+}
+.btn-info-center .gift-emoji {
+  font-size: 22px;
+  margin: -2px 0;
+  animation: gift-wiggle 2.4s ease-in-out infinite;
+}
+.btn-info-center .gift-emoji::after { display: none; }
+@keyframes btn-info-pulse {
+  0%, 100% { box-shadow: 0 2px 12px rgba(180,140,60,0.15); }
+  50% { box-shadow: 0 2px 20px rgba(180,140,60,0.35); }
+}
 
 .btn-info .gift-emoji {
   display: inline-block;
@@ -814,29 +862,47 @@ body.line-active .btn-info-mobile { opacity: 0.55; }
     <div class="header-deco-line"></div>
     <div class="header-title"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60" style="width:22px;height:22px;vertical-align:middle;margin-right:5px;"><ellipse cx="30" cy="46" rx="16" ry="10" fill="#3d6b35" opacity="0.85" transform="rotate(-10,30,46)"/><path d="M30 36 C16 44 14 46 14 46" stroke="#2a4a22" stroke-width="1.2" fill="none" opacity="0.7"/><path d="M30 36 C44 44 46 46 46 46" stroke="#2a4a22" stroke-width="1.2" fill="none" opacity="0.7"/><path d="M30 38 C16 28 12 12 22 5 C26 2 30 6 30 6 C30 6 34 2 38 5 C48 12 44 28 30 38Z" fill="#c0607a" opacity="0.90"/><path d="M30 35 C20 24 18 10 26 5 C28 4 30 6 30 6 C30 6 32 4 34 5 C42 10 40 24 30 35Z" fill="#e8809a" opacity="0.92"/><path d="M30 32 C24 22 23 12 28 7 C29 6 30 7 30 7 C30 7 31 6 32 7 C37 12 36 22 30 32Z" fill="#f8dde5" opacity="0.95"/><circle cx="30" cy="24" r="4.5" fill="#e8b820" opacity="0.90"/><circle cx="30" cy="24" r="2.5" fill="#f5d040" opacity="1"/></svg>人間善緣</div>
     <div class="header-deco-line"></div>
-    <button class="btn-info" onclick="toggleInfo()" id="btn-info-toggle"><span class="gift-emoji">🎁</span> 善緣有禮</button>
+    <button class="btn-info" onclick="toggleInfo()"><span class="gift-emoji">🎁</span> 善緣有禮</button>
   </div>
   <div class="header-sub">心燈一盞，伴您前行</div>
+  <div class="btn-info-center">
+    <button class="btn-info" onclick="toggleInfo()" id="btn-info-toggle"><span class="gift-emoji">🎁</span> 善緣有禮 ▾</button>
+  </div>
   <div class="header-info-btn-mobile">
     <button class="btn-info btn-info-mobile" onclick="toggleInfo()" id="btn-info-toggle-mobile"><span class="gift-emoji">🎁</span> 善緣有禮 ▾</button>
   </div>
   <div class="info-bar" id="info-bar">
     <div class="info-bar-inner">
       <div class="info-section">
-        <strong><span class="info-icon">🪷</span> 我是善緣</strong>
-        一個深受人間佛教薰陶的在家陪伴者，在星雲大師智慧啟發下，用真誠、不評判的心陪伴每一個人。
+        <strong class="info-title-main">善緣送您祁福禮</strong>
+        <div style="margin-top:6px;">
+          <div class="info-title-sub"><span class="info-icon">🪷</span> 關於善緣</div>
+          一個深受人間佛教薰陶的在家陪伴者，在星雲大師智慧啟發下，用真誠、不評判的心陪伴每一個人。<br>不論你有什麼信仰，只要想說說話，善緣都在。
+        </div>
+        <div style="margin-top:8px;">
+          <div class="info-title-sub"><span class="info-icon">🎁</span> 道別說再見，贈您祈福禮</div>
+          <div style="margin-top:4px; padding:6px 10px; background:linear-gradient(135deg, rgba(255,240,210,0.7), rgba(255,225,180,0.6)); border-left:3px solid rgba(180,140,60,0.5); border-radius:4px; font-size:12px; line-height:1.8; color:#5a4a30;">
+            談話結束時，記得道別說<strong style="white-space:nowrap; color:#8a6020;">「再見」</strong>，善緣會根據對話，送上大師金言，為您祁福。
+          </div>
+        </div>
       </div>
       <div class="info-section">
-        <strong><span class="info-icon">🎁</span> 善緣送您祁福禮</strong>
-        ✦ 不論你有什麼信仰，只要想說說話，善緣都在。<br>✦ 談話結束時，記得道別說<span style="white-space:nowrap;">「再見」</span>，善緣會根據對話，送上大師金言，為您祁福。
+        <strong class="info-title-main">感恩致謝</strong>
+        <div style="margin-top:6px;">
+          <div class="info-title-sub"><span class="info-icon">📖</span> 精神糧食</div>
+          本系統的訓練資料來自<strong>《星雲大師全集》</strong>
+        </div>
+        <div style="margin-top:8px;">
+          <div class="info-title-sub"><span class="info-icon">🙏</span> 特別感謝</div>
+          <div style="margin-top:2px;">
+            <span><strong style="display:inline;white-space:nowrap;">佛光山人間佛教研究院</strong></span><br>
+            <span><strong style="display:inline;white-space:nowrap;">佛光大學</strong> 特色研究專案、生命學研究中心</span>
+          </div>
+          <div style="margin-top:4px;">支持和鼓勵本項目的開發。</div>
+        </div>
       </div>
-      <div class="info-section">
-        <strong><span class="info-icon">📖</span> 精神糧食</strong>
-        本系統的訓練資料來自<strong>《星雲大師全集》</strong>
-      </div>
-      <div class="info-section info-section-full" style="flex-basis:100%; margin-top:8px; padding-top:14px;">
-        <strong><span class="info-icon">🙏</span> 特別感謝</strong>
-        <span><strong style="display:inline;margin-bottom:0;white-space:nowrap;">佛光山人間佛教研究院</strong>．<strong style="display:inline;margin-bottom:0;white-space:nowrap;">佛光大學特色研究專案</strong>．<strong style="display:inline;margin-bottom:0;white-space:nowrap;">佛光大學生命學研究中心</strong> 支持和鼓勵本項目的開發。</span>
+      <div style="flex-basis:100%; text-align:center; padding-top:10px;">
+        <button class="btn-info-close" onclick="toggleInfo()">收起 ▴</button>
       </div>
     </div>
   </div>
@@ -912,7 +978,7 @@ body.line-active .btn-info-mobile { opacity: 0.55; }
 <script>
 var ignoreSpeechUntil = 0;
 
-function armPostTtsInputCooldown(ms = 1500) {
+function armPostTtsInputCooldown(ms = 500) {
   ignoreSpeechUntil = Math.max(ignoreSpeechUntil, performance.now() + ms);
 }
 
@@ -1214,11 +1280,11 @@ class MobileVoiceEngine {
       } else {
         speechFrames = 0;
         if (!this._silenceTimeout && this.hasSpeech) {
-          console.log('[MVE2] 靜音開始，等 900ms');
+          console.log('[MVE2] 靜音開始，等 2500ms');
           this._silenceTimeout = setTimeout(() => {
             this._silenceTimeout = null;
             if (this.isRecording) this._stopAndFire();
-          }, 900);
+          }, 2500);
         }
       }
     }, 50);
@@ -1396,7 +1462,7 @@ async function speakAssistantNotice(text, statusText = '善緣說話中…') {
     ttsPlaybackDone = true;
   }
   if (voiceConvoActive && !voiceStopRequested) {
-    armPostTtsInputCooldown(isMobile ? 1800 : 1400);
+    armPostTtsInputCooldown(isMobile ? 600 : 500);
     setConvoStatus('聆聽中…', true);
     await startRecording();
   }
@@ -1467,7 +1533,7 @@ function ttsReleaseMic() {
       try { await mve.reacquireMic(); } catch(e) { console.error('[ttsReleaseMic] reacquireMic 失敗:', e); }
     }
     if (canStartRecording()) {
-      armPostTtsInputCooldown(isMobile ? 1800 : 1400);
+      armPostTtsInputCooldown(isMobile ? 600 : 500);
       setConvoStatus('聆聽中…', true);
       startRecording();
     } else if (voiceConvoActive && !voiceStopRequested) {
@@ -1477,14 +1543,14 @@ function ttsReleaseMic() {
         waited += 200;
         if (canStartRecording()) {
           clearInterval(poll);
-          armPostTtsInputCooldown(isMobile ? 1800 : 1400);
+          armPostTtsInputCooldown(isMobile ? 600 : 500);
           setConvoStatus('聆聽中…', true);
           startRecording();
         } else if (waited >= 5000 || !voiceConvoActive) {
           clearInterval(poll);
           if (voiceConvoActive && !voiceStopRequested) {
             llmDone = true;
-            armPostTtsInputCooldown(isMobile ? 1800 : 1400);
+            armPostTtsInputCooldown(isMobile ? 600 : 500);
             setConvoStatus('聆聽中…', true);
             startRecording();
           }
@@ -1892,11 +1958,7 @@ if (isMobile && window.visualViewport) {
 
 function toggleInfo() {
   const bar = document.getElementById('info-bar');
-  const open = bar.classList.toggle('open');
-  const btn = document.getElementById('btn-info-toggle');
-  const btnM = document.getElementById('btn-info-toggle-mobile');
-  if (btn) btn.innerHTML = open ? '收起' : '<span class="gift-emoji">🎁</span> 善緣有禮';
-  if (btnM) btnM.innerHTML = open ? '收起 ▴' : '<span class="gift-emoji">🎁</span> 善緣有禮 ▾';
+  bar.classList.toggle('open');
 }
 
 function getChatInner() { return document.getElementById('chat-inner'); }
@@ -2319,7 +2381,7 @@ async function startVoiceConvo() {
   }
 
   if (!voiceConvoActive || voiceStopRequested) return;
-  armPostTtsInputCooldown(isMobile ? 1800 : 1400);
+  armPostTtsInputCooldown(isMobile ? 600 : 500);
   setConvoStatus('聆聽中…', true);
   await startRecording();
 }
@@ -2434,7 +2496,7 @@ async function startRecording() {
     analyser.fftSize = 512;
     source.connect(analyser);
     const timeBuf = new Float32Array(analyser.fftSize);
-    const SILENCE_MS = 1500;
+    const SILENCE_MS = 2500;
     hasSpeech = false;
     let noiseFloor = 0;
     let noiseFrames = 0;

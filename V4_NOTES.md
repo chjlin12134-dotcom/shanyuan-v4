@@ -35,6 +35,7 @@
 
 `ANTHROPIC_API_KEY` 和 `OPENCODE_GO_API_KEY` **從未被部署到 Cloud Run 上**。
 查證 10 個歷史 revision（00015 ~ 00024），全部都只有 `GROQ_API_KEY` + `GROQ_STT_API_KEY`。
+2026-09-03：已將 `OPENCODE_GO_API_KEY` 改為 `DEEPSEEK_API_KEY`（DeepSeek 直連 API）。
 
 ### 時間線
 
@@ -47,13 +48,40 @@
 
 ### 關鍵發現
 
-1. OpenCode 的 `gcloud run deploy --source` **沒有覆蓋 Cloud Run 環境變數**（00023 和 00024 的 Groq keys 完全一致）
-2. `GROQ_API_KEY` 在 7/13 的 Cloud Build 自動部署中被更換（00015 → 00022），此與 OpenCode 無關
-3. 道別祈福之前能執行，最可能是**在本機測試**（本機 `.env` 有完整 keys），而非 Cloud Run
+1. `gcloud run deploy --source` **不會覆蓋 Cloud Run 環境變數**（再次確認：rev 00029 部署後四把 key 全在）
+2. `GROQ_API_KEY` 在 7/13 的 Cloud Build 自動部署中被更換（00015 → 00022），與 OpenCode 無關
+3. 道別祈福之前能執行 → 無法證實是否在 Cloud Run 上（所有歷史 revision 都無 ANTHROPIC_API_KEY）
 
-### 待修
+### 本次修正（rev 00029）
 
-- rev 00025 的 `OPENCODE_GO_API_KEY` 和 `ANTHROPIC_API_KEY` 設定值黏在一起（格式錯誤），需重新分開設定
+- `get_blessing()` 加入黑名單過濾 12 組負面詞
+- TTS 改用 SSML `<phoneme>` 修正「怎麼/什麼」輕聲發音
+- 移除 TTS 句首 `、` 墊字，避免不自然停頓
+
+## 2026-07-16 收工總結
+
+### 已完成
+
+1. Cloud Run 環境變數補齊（GROQ ×2 + OPENCODE_GO + ANTHROPIC）
+2. `gcloud run deploy --source` 確認不會覆蓋 env vars
+3. 祈福禮 `get_blessing()` 加入 12 組負面詞黑名單過濾
+4. TTS 句首移除 `、` 墊字（SSML phoneme 嘗試失敗，已回退）
+5. 道別 farewell 指令：`句號結尾` → `逗號代替句號`
+6. `index.html` `BUDDHIST_CONFIRM_TEXT` 刪除「你提到的是佛法裡的語言。」
+7. 語料庫新增四部佛經 82 篇（金剛經、心經、六祖壇經、法華經）
+8. 語料庫從 8,507 → 9,019 筆
+9. Cloud Run 升級：記憶體 512Mi → 1Gi，min_instances 1，concurrency 20
+10. Aider 接手（GitHub Models + gpt-4o-mini）
+11. 建立 `SKILL_V4.md` 操作手冊
+12. 建立 `收工備忘_2026-07-16_善緣V4.txt`
+
+### 已知待處理
+
+- `/healthz` 端點回 Cloud Run 404（不影響主功能）
+- 語料萃取 `extract_opencode.py` 約 30% 失敗率（DeepSeek V4 Flash 推理模型輸出格式不穩）
+- 可考慮用其他模型（如 gpt-4o-mini via GitHub Models）提高萃取成功率
+- 六祖壇經/法華經可能還有未爬完的文章（可搜尋網站補齊）
+- Cron-job keepalive 尚未設定
 
 ## 尚未做
 
