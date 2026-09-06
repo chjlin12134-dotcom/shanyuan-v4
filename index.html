@@ -2242,6 +2242,16 @@ async function sendMessage(userText, skipTyping = false, opts = {}) {
               setConvoStatus('聆聽中…', true);
               await startRecording();
             }
+          } else if (data.type === 'empty_retry') {
+            // LLM 回傳空字串（DeepSeek reasoning model 把 token 用盡，或 STT 太短導致無輸出）。
+            // 不顯示任何罐頭句，在語音模式下靜默重啟錄音；文字模式下移除等待動畫。
+            console.log('[chat] empty_retry received — 靜默重啟，不顯示罐頭句');
+            removeTyping();
+            if (isVoice && voiceConvoActive && !voiceStopRequested) {
+              setConvoStatus('聆聽中…', true);
+              ttsPlaybackDone = true;
+              await startRecording();
+            }
           } else if (data.type === 'error') {
             if (contentSpan) contentSpan.textContent = `（連線出了點狀況：${data.message}）`;
           }

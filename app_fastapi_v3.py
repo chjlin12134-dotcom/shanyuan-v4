@@ -953,10 +953,15 @@ async def chat(request: Request):
                     }, ensure_ascii=False) + "\n\n"
 
             if not full_response.strip():
-                fallback_text = "我剛剛沒有聽清楚，你可以再說一次嗎？"
-                full_response = fallback_text
-                print("[chat] empty response -> clarification fallback")
-                yield "data: " + json.dumps({"type": "token", "text": fallback_text}, ensure_ascii=False) + "\n\n"
+                # LLM 回傳空字串（常見原因：DeepSeek reasoning model 把 max_tokens 吃光、
+                # 或短到沒有意義的 STT 輸入導致模型沒有生成 content）。
+                # 舊版用「我沒聽清楚，你可以再說一次嗎？」——這句話在語音對話裡造成混淆：
+                # 使用者以為是 STT 出錯，其實是 LLM 沒輸出，兩個問題完全不同。
+                # 新版改為：讓前端靜默繼續聆聽（type=empty_retry），不播出任何罐頭句。
+                # 前端收到 empty_retry 後，在語音模式下直接重啟錄音；
+                # 在文字模式下也不顯示任何訊息，等使用者主動再說。
+                print("[chat] empty response -> sending empty_retry signal (no fallback text)")
+                yield "data: " + json.dumps({"type": "empty_retry"}, ensure_ascii=False) + "\n\n"
 
             print(f"[chat] done, len={len(full_response)}")
             yield "data: " + json.dumps({"type": "done", "full": full_response}, ensure_ascii=False) + "\n\n"
