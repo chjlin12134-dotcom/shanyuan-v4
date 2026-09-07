@@ -266,13 +266,17 @@ def format_retrieved(items: list[dict], buddhist_mode: bool = False) -> str:
     COL_QUOTE   = "大師金句"
     COL_ACCOMP  = "善緣陪伴語"
     COL_SOURCE  = "出處"
+    COL_DIM     = "維度"
+    COL_MOD     = "模組"
     blocks = ["\n\n---\n## 參考語料（不必引用，只供靈感）\n"]
     for i, it in enumerate(items, 1):
-        # 只保留金句和陪伴語，省略故事（縮短 prompt 長度）
         quote = it.get(COL_QUOTE, '')[:60]
         accomp = it.get(COL_ACCOMP, '')[:60]
         source = it.get(COL_SOURCE, '')
-        blocks.append(f"[{i}] 金句：{quote} / 陪伴語：{accomp} / 出處：{source}\n")
+        dim = it.get(COL_DIM, '')
+        mod = it.get(COL_MOD, '')
+        dim_mod = f" / {dim} / {mod}" if dim else ""
+        blocks.append(f"[{i}] 金句：{quote} / 陪伴語：{accomp} / 出處：{source}{dim_mod}\n")
     blocks.append("不要照念，逐字念出參考語料。\n")
     if buddhist_mode:
         blocks.append("使用者已經進入佛法討論模式，可以自然提到星雲大師的名字，不用刻意迴避。\n")
