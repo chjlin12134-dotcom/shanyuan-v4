@@ -961,6 +961,10 @@ async def chat(request: Request):
                     full_response = NO_CONFIDENT_SOURCE_REPLY
                 if full_response:
                     yield "data: " + json.dumps({"type": "token", "text": full_response}, ensure_ascii=False) + "\n\n"
+                else:
+                    # buddhist_mode 空回應：跟一般模式一樣，送 empty_retry 讓前端重新聆聽
+                    print("[chat][buddhist] empty response -> sending empty_retry signal")
+                    yield "data: " + json.dumps({"type": "empty_retry"}, ensure_ascii=False) + "\n\n"
 
             elif CHAT_MODEL_TIER == "premium":
                 print(f"[chat] premium -> {PREMIUM_MODEL}")
