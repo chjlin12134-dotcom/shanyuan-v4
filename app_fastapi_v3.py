@@ -35,7 +35,7 @@ BLESSING_MODEL  = os.environ.get("BLESSING_MODEL", "claude-haiku-4-5-20251001")
 PREMIUM_MODEL   = "claude-sonnet-4-5"
 
 GROQ_CHAT_URL   = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_CHAT_MODEL = "openai/gpt-oss-120b"  # 2026-09-07: qwen/qwen3.6-27b 對中文輸入有幻覺問題，換用 gpt-oss-120b
+GROQ_CHAT_MODEL = "qwen/qwen3.6-27b"  # 2026-09-07: 加 reasoning_effort=none 避免 thinking 外泄
 
 GO_MODEL    = "deepseek-v4-flash"
 GO_BASE_URL = "https://api.deepseek.com/v1/chat/completions"
@@ -359,6 +359,10 @@ async def _stream_groq(groq_key: str, system: str, messages: list[dict]):
         "max_tokens": 1024,
         "messages": [{"role": "system", "content": system}] + messages,
     }
+    # qwen3.x 預設開 thinking，會把 <think> 過程灌進回覆。
+    # 官方指引：一般對話用 non-thinking（reasoning_effort="none"）。
+    if GROQ_CHAT_MODEL.startswith("qwen/"):
+        payload["reasoning_effort"] = "none"
     try:
         async with get_http_client().stream(
             "POST", GROQ_CHAT_URL,
