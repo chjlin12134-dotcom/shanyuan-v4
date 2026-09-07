@@ -35,7 +35,7 @@ BLESSING_MODEL  = os.environ.get("BLESSING_MODEL", "claude-haiku-4-5-20251001")
 PREMIUM_MODEL   = "claude-sonnet-4-5"
 
 GROQ_CHAT_URL   = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_CHAT_MODEL = "llama-3.3-70b-versatile"  # 換回 V3 使用的模型，gpt-oss-120b 對 prompt 遵從度較差
+GROQ_CHAT_MODEL = "qwen/qwen3.6-27b"  # 2026-09-07: llama-3.3-70b-versatile 已於 8/16 棄用，換用 Groq 推薦替代
 
 GO_MODEL    = "deepseek-v4-flash"
 GO_BASE_URL = "https://api.deepseek.com/v1/chat/completions"
